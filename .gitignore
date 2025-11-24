@@ -1,0 +1,34 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# IDE config
+.idea/
+.vscode/
+*.code-workspace
+
+# OS files
+.DS_Store
+
+# Build / logs
+logs/
+*.log
+
+# Zips / temporary data
+*.zip
+
+# PyTest cache
+.pytest_cache/
+
+# Data that should not be versioned (optional)
+data/episodic/*
+!data/episodic/.gitkeep
+

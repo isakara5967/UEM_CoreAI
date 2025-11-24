@@ -1,0 +1,20 @@
+# UEM çekirdek konfigürasyonu
+
+subsistems:
+  perception: true
+  memory: true
+  cognition: true
+  planning: true
+  emotion: true
+  ethmor: true
+  metamind: true
+  self: true
+
+loop:
+  # Ana döngü tick süresi (saniye)
+  tick_seconds: 0.1
+
+logging:
+  # İleride log seviyesi config'ten okunmak istenirse
+  level: INFO
+
