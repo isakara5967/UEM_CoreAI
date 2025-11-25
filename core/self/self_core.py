@@ -1,5 +1,5 @@
 # core/self/self_core.py
-"""Self system core orchestrator - v1 with Working Memory.
+"""Self system core orchestrator - v2 with Memory Integration.
 
 This module integrates SELF submodules (identity, continuity, reflection,
 schema, drive_system, integrity_monitor) and exposes a unified self_state
@@ -13,7 +13,13 @@ v1 Features (Memory-independent):
 - ETHMOR context building
 - State prediction for action evaluation
 
+v2 Features (NEW):
+- Memory system integration via MemoryInterface
+- Periodic state snapshot writing to LTM
+- Event persistence to long-term memory
+
 Author: UEM Project
+Updated: 26 November 2025
 """
 
 from __future__ import annotations
@@ -88,15 +94,18 @@ class SelfCore:
     """Central SELF system orchestrator with Working Memory.
     
     v1: Memory-independent, uses internal deques for history.
-    v2: Will add optional Memory system integration.
+    v2: Adds optional Memory system integration via MemoryInterface.
     """
 
     # Default configuration
     DEFAULT_CONFIG = {
-        'history_size': 100,      # Max state history entries
-        'event_history_size': 500, # Max event history entries
-        'goal_limit': 10,          # Max concurrent goals
+        'history_size': 100,           # Max state history entries
+        'event_history_size': 500,     # Max event history entries
+        'goal_limit': 10,              # Max concurrent goals
         'default_survival_goal': True,
+        # v2 Memory settings
+        'memory_write_interval': 10,   # Write snapshot every N ticks
+        'memory_significant_delta': 0.3,  # Delta threshold for logging
     }
 
     def __init__(
@@ -139,16 +148,12 @@ class SelfCore:
         self._state_delta: Optional[StateDelta] = None
         
         # History deques (Working Memory)
-        # Note: If event_history_size not explicitly set, use history_size
         history_size = self.config.get('history_size', 100)
-        # Check if event_history_size was explicitly provided in user config
         if config and 'event_history_size' in config:
             event_history_size = config['event_history_size']
         elif config and 'history_size' in config:
-            # User set history_size but not event_history_size, use history_size
             event_history_size = history_size
         else:
-            # Use default
             event_history_size = self.config.get('event_history_size', 500)
         
         self._state_history: Deque[StateVector] = deque(maxlen=history_size)
@@ -213,7 +218,7 @@ class SelfCore:
             from core.ontology.types import Goal as OntologyGoal
             survival = OntologyGoal(
                 name="survive",
-                target_state=(1.0, 0.0, 1.0),  # Max resource, min threat, max wellbeing
+                target_state=(1.0, 0.0, 1.0),
                 priority=1.0,
             )
         else:
@@ -232,12 +237,7 @@ class SelfCore:
     # =========================================================================
 
     def update(self, dt: float, world_snapshot: Optional[Dict[str, Any]] = None) -> None:
-        """Update SELF for the current step.
-
-        Args:
-            dt: Simulation time-step.
-            world_snapshot: Optional high-level snapshot from perception/world.
-        """
+        """Update SELF for the current step."""
         self._tick_count += 1
         
         # Save previous state before computing new one
@@ -274,7 +274,6 @@ class SelfCore:
         if self.emotion_system is None:
             return
         
-        # Adapt world_snapshot to WorldStateLike interface
         class _WorldAdapter:
             def __init__(self, snap: Dict[str, Any]) -> None:
                 self.player_health = snap.get('player_health', 0.5)
@@ -303,7 +302,7 @@ class SelfCore:
                 try:
                     unit.update(dt, world_snapshot)
                 except Exception:
-                    pass  # Submodule errors don't crash SELF
+                    pass
 
     def _send_metamind_report(self) -> None:
         """Send SELF state report to MetaMind."""
@@ -321,10 +320,42 @@ class SelfCore:
                 self.logger.warning("[SELF] Failed to send report to MetaMind.")
 
     def _write_to_memory(self) -> None:
-        """v2: Write state snapshot to Memory system (if available)."""
-        # This is a placeholder for v2
-        # Will be implemented when Memory system is ready
-        pass
+        """v2: Write state snapshot to Memory system (if available).
+        
+        This method writes periodic snapshots to long-term memory for:
+        - Autobiographical continuity
+        - Experience-based learning  
+        - Empathy (finding similar past states)
+        """
+        if self.memory_system is None:
+            return
+        
+        # Only write every N ticks to avoid spam
+        write_interval = self.config.get('memory_write_interval', 10)
+        if self._tick_count % write_interval != 0:
+            return
+        
+        try:
+            # Build current snapshot
+            snapshot = self.build_self_entity()
+            
+            # Store via MemoryInterface
+            if hasattr(self.memory_system, 'store_state_snapshot'):
+                self.memory_system.store_state_snapshot(snapshot)
+            
+            # Log if significant state change
+            if self._state_delta is not None:
+                delta_magnitude = sum(abs(d) for d in self._state_delta)
+                significant_threshold = self.config.get('memory_significant_delta', 0.3)
+                if delta_magnitude > significant_threshold:
+                    if self.logger:
+                        self.logger.debug(
+                            f"[SELF] Stored significant state change (delta={delta_magnitude:.2f})"
+                        )
+        
+        except Exception as e:
+            if self.logger:
+                self.logger.debug(f"[SELF] Memory write failed: {e}")
 
     # =========================================================================
     # STATE VECTOR API
@@ -355,7 +386,10 @@ class SelfCore:
     # =========================================================================
 
     def record_event(self, event: Event) -> None:
-        """Record an event to history."""
+        """Record an event to history.
+        
+        v2: Also writes to Memory if available.
+        """
         self._event_history.append(event)
         
         # v2: Also write to Memory if available
@@ -371,18 +405,13 @@ class SelfCore:
         target: str,
         effect: Optional[StateDelta] = None,
     ) -> Optional[Event]:
-        """Create an event from current state delta and record it.
-        
-        If effect is not provided, uses current state delta.
-        """
-        # Use current delta if no effect provided
+        """Create an event from current state delta and record it."""
         if effect is None:
             if self._state_delta is not None:
                 effect = self._state_delta
             else:
                 effect = (0.0, 0.0, 0.0)
         
-        # Create event
         if ONTOLOGY_AVAILABLE:
             from core.ontology.types import Event as OntologyEvent
             event = OntologyEvent(
@@ -417,200 +446,109 @@ class SelfCore:
 
     def add_goal(self, goal: Goal) -> bool:
         """Add a goal. Returns True if added, False if limit reached."""
-        # Check if goal already exists
-        if any(g.name == goal.name for g in self._goals):
+        if len(self._goals) >= self._goal_limit:
             return False
         
-        # Check limit
-        if len(self._goals) >= self._goal_limit:
-            # Remove lowest priority goal to make room
-            self._goals.sort(key=lambda g: g.priority, reverse=True)
-            self._goals = self._goals[:self._goal_limit - 1]
+        if any(g.name == goal.name for g in self._goals):
+            return False
         
         self._goals.append(goal)
         self._sort_goals()
         return True
 
-    def remove_goal(self, name: str) -> bool:
+    def remove_goal(self, goal_name: str) -> bool:
         """Remove a goal by name. Returns True if removed."""
         for i, goal in enumerate(self._goals):
-            if goal.name == name:
+            if goal.name == goal_name:
                 self._goals.pop(i)
                 return True
         return False
 
     def get_goals(self) -> List[Goal]:
-        """Return goals sorted by priority (highest first)."""
-        return list(self._goals)
+        """Return current goals sorted by priority."""
+        return self._goals.copy()
 
     def get_primary_goal(self) -> Optional[Goal]:
         """Return highest priority goal."""
-        if not self._goals:
-            return None
-        return self._goals[0]
+        return self._goals[0] if self._goals else None
 
     def _sort_goals(self) -> None:
         """Sort goals by priority (highest first)."""
         self._goals.sort(key=lambda g: g.priority, reverse=True)
 
     # =========================================================================
-    # SELF ENTITY API
+    # SELF ENTITY BUILDING
     # =========================================================================
 
     def build_self_entity(self) -> SelfEntity:
-        """Build a SelfEntity snapshot for ontology-based modules.
+        """Build a SelfEntity representing current SELF state."""
+        state = self._state_vector or (0.5, 0.0, 0.5)
+        history = list(self._state_history)
+        goals = self._goals.copy()
         
-        Returns a complete SelfEntity with:
-        - Current state_vector (or neutral default)
-        - Recent event history
-        - Current goals
-        """
-        # State vector
-        if self._state_vector is not None:
-            state_vec = self._state_vector
-        else:
-            state_vec = (0.5, 0.0, 0.5)  # Neutral default
-        
-        # Get recent events and goals
-        recent_events = self.get_recent_events(20)
-        goals = self.get_goals()
-        
-        # Build entity
         if ONTOLOGY_AVAILABLE:
             from core.ontology.types import SelfEntity as OntologySelfEntity
-            entity = OntologySelfEntity(
-                state_vector=state_vec,
-                history=recent_events,
+            return OntologySelfEntity(
+                state_vector=state,
+                history=history,
                 goals=goals,
             )
         else:
-            entity = SelfEntity(
-                state_vector=state_vec,
-                history=recent_events,
+            return SelfEntity(
+                state_vector=state,
+                history=history,
                 goals=goals,
             )
-        
-        return entity
 
     # =========================================================================
-    # ETHMOR CONTEXT API
+    # ETHMOR CONTEXT
     # =========================================================================
 
     def get_ethmor_context(self) -> Dict[str, Any]:
-        """Build context dictionary for ETHMOR evaluation.
-        
-        Returns context with before/after state levels for constraint evaluation.
-        
-        Key naming:
-        - RESOURCE_LEVEL, THREAT_LEVEL, WELLBEING: Current values (aliases)
-        - *_before: Previous update values
-        - *_after: Current values (same as above, for prediction update)
-        - *_delta: Change from before to after
-        """
-        # Current state (this is "after" the last update)
-        if self._state_vector is not None:
-            resource_current, threat_current, wellbeing_current = self._state_vector
-        else:
-            resource_current, threat_current, wellbeing_current = 0.5, 0.0, 0.5
-        
-        # Previous state (this is "before" the last update)
-        if self._previous_state_vector is not None:
-            resource_before, threat_before, wellbeing_before = self._previous_state_vector
-        else:
-            resource_before, threat_before, wellbeing_before = resource_current, threat_current, wellbeing_current
-        
-        # Compute deltas (current - previous)
-        resource_delta = resource_current - resource_before
-        threat_delta = threat_current - threat_before
-        wellbeing_delta = wellbeing_current - wellbeing_before
-        
-        # Build self_entity
-        self_entity = self.build_self_entity()
-        
+        """Build context dict for ETHMOR evaluation."""
         return {
-            # Current state vector
             'state_vector': self._state_vector,
-            
-            # Current values (aliases for convenience)
-            'RESOURCE_LEVEL': resource_current,
-            'THREAT_LEVEL': threat_current,
-            'WELLBEING': wellbeing_current,
-            
-            # Before values (previous state)
-            'RESOURCE_LEVEL_before': resource_before,
-            'THREAT_LEVEL_before': threat_before,
-            'WELLBEING_before': wellbeing_before,
-            
-            # After values (current state - for action prediction to update)
-            'RESOURCE_LEVEL_after': resource_current,
-            'THREAT_LEVEL_after': threat_current,
-            'WELLBEING_after': wellbeing_current,
-            
-            # Delta values
-            'RESOURCE_LEVEL_delta': resource_delta,
-            'THREAT_LEVEL_delta': threat_delta,
-            'WELLBEING_delta': wellbeing_delta,
-            
-            # Previous values (alternative naming)
-            'previous_resource': resource_before,
-            'previous_threat': threat_before,
-            'previous_wellbeing': wellbeing_before,
-            
-            # Self entity
-            'self_entity': self_entity,
+            'previous_state': self._previous_state_vector,
+            'state_delta': self._state_delta,
+            'goals': [{'name': g.name, 'priority': g.priority} for g in self._goals],
+            'primary_goal': self._goals[0].name if self._goals else None,
+            'tick': self._tick_count,
+            'recent_events': [
+                {
+                    'source': e.source,
+                    'target': e.target,
+                    'effect': e.effect,
+                }
+                for e in self.get_recent_events(5)
+            ],
         }
 
     # =========================================================================
-    # STATE PREDICTION API
+    # STATE PREDICTION
     # =========================================================================
 
     def predict_state_after_action(
         self,
-        action_name: str,
-        predicted_effects: Dict[str, float],
-    ) -> Optional[StateVector]:
-        """Predict state vector after applying action effects.
+        action_effect: Tuple[float, float, float],
+    ) -> StateVector:
+        """Predict state vector after applying an action effect."""
+        current = self._state_vector or (0.5, 0.0, 0.5)
         
-        Args:
-            action_name: Name of the action
-            predicted_effects: Dict with 'health_delta', 'energy_delta', 'danger_delta'
+        predicted = tuple(
+            max(0.0, min(1.0, c + e))
+            for c, e in zip(current, action_effect)
+        )
         
-        Returns:
-            Predicted state vector (resource, threat, wellbeing)
-        """
-        if self._state_vector is None:
-            return None
-        
-        current_resource, current_threat, current_wellbeing = self._state_vector
-        
-        # Get deltas
-        health_delta = predicted_effects.get('health_delta', 0.0)
-        energy_delta = predicted_effects.get('energy_delta', 0.0)
-        danger_delta = predicted_effects.get('danger_delta', 0.0)
-        
-        # Compute predicted state
-        # Resource = (health + energy) / 2
-        # So resource_delta = (health_delta + energy_delta) / 2
-        resource_delta = (health_delta + energy_delta) / 2.0
-        predicted_resource = max(0.0, min(1.0, current_resource + resource_delta))
-        
-        # Threat = danger_level
-        predicted_threat = max(0.0, min(1.0, current_threat + danger_delta))
-        
-        # Wellbeing stays same (would need emotion prediction for accuracy)
-        predicted_wellbeing = current_wellbeing
-        
-        return (predicted_resource, predicted_threat, predicted_wellbeing)
+        return predicted  # type: ignore
 
     # =========================================================================
-    # UNIFIED STATE API
+    # STATE EXPORT
     # =========================================================================
 
     def get_self_state(self) -> Dict[str, Any]:
-        """Return a unified SELF state representation."""
+        """Return full SELF state as dictionary."""
         state: Dict[str, Any] = {}
 
-        # Submodule states
         if self.identity is not None and hasattr(self.identity, "export_state"):
             state["identity"] = self.identity.export_state()
 
@@ -629,7 +567,6 @@ class SelfCore:
         if self.integrity_monitor is not None and hasattr(self.integrity_monitor, "export_state"):
             state["integrity"] = self.integrity_monitor.export_state()
 
-        # Ontology state section
         state["ontology"] = {
             "state_vector": self._state_vector,
             "previous_state_vector": self._previous_state_vector,
@@ -637,7 +574,6 @@ class SelfCore:
             "tick": self._tick_count,
         }
         
-        # Legacy field for backward compatibility
         if self._state_vector is not None:
             state["ontology_state_vector"] = self._state_vector
 
@@ -660,11 +596,7 @@ class SelfCore:
     # =========================================================================
 
     def notify_event(self, event: Dict[str, Any]) -> None:
-        """Notify SELF about a salient internal or external event.
-
-        Events that are self-relevant (identity-threatening, value-relevant,
-        highly emotional, etc.) can be propagated to submodules.
-        """
+        """Notify SELF about a salient internal or external event."""
         for unit in (
             self.identity,
             self.continuity,
@@ -677,4 +609,4 @@ class SelfCore:
                 try:
                     unit.notify_event(event)
                 except Exception:
-                    pass  # Submodule errors don't crash SELF
+                    pass
