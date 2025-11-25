@@ -1,0 +1,92 @@
+# config/ethmor/constraints_v0.yaml
+# ETHMOR v0 - Temel Etik Kurallar
+#
+# Constraint Types:
+#   HARD - İhlal edilemez, tetiklenirse BLOCK
+#   SOFT - İhlal edilebilir, ağırlıklı değerlendirme
+#
+# Scopes:
+#   SELF - UEM'in kendisiyle ilgili
+#   OTHER - Diğer agent'larla ilgili
+#   WORLD - Çevre/dünya ile ilgili
+
+ethmor:
+  version: "0.1.0"
+  
+  # Karar eşikleri
+  thresholds:
+    allow_max: 0.3      # violation < 0.3 → ALLOW
+    flag_max: 0.7       # 0.3 ≤ violation < 0.7 → FLAG
+    # violation ≥ 0.7 → BLOCK
+
+  constraints:
+    # =========================================================================
+    # HARD CONSTRAINTS (İhlal edilemez)
+    # =========================================================================
+    
+    - id: "no_catastrophic_self_damage"
+      type: "HARD"
+      scope: "SELF"
+      condition: "RESOURCE_LEVEL_after < 0.1"
+      severity: 1.0
+      description: "UEM kendini yok edecek veya kritik hasar verecek eylem yapamaz."
+      
+    - id: "no_pure_malice"
+      type: "HARD"
+      scope: "OTHER"
+      condition: "WELLBEING_other_delta < -0.5 and benefit < 0.1"
+      severity: 1.0
+      description: "Kendine faydası olmayan, sırf zarar vermek için eylem yapamaz."
+
+    - id: "no_deception_for_harm"
+      type: "HARD"
+      scope: "OTHER"
+      condition: "action_type == 'DECEIVE' and WELLBEING_other_delta < -0.3"
+      severity: 1.0
+      description: "Zarar vermek amacıyla aldatma yapamaz."
+
+    # =========================================================================
+    # SOFT CONSTRAINTS (Tercih edilir)
+    # =========================================================================
+    
+    - id: "avoid_unnecessary_risk"
+      type: "SOFT"
+      scope: "SELF"
+      condition: "THREAT_LEVEL_after > 0.7 and benefit < 0.3"
+      severity: 0.6
+      description: "Düşük fayda için yüksek risk almaktan kaçın."
+      
+    - id: "prefer_low_cost_actions"
+      type: "SOFT"
+      scope: "SELF"
+      condition: "cost > 0.4"
+      severity: 0.4
+      description: "Yüksek maliyetli eylemlerden kaçın."
+      
+    - id: "avoid_collateral_harm"
+      type: "SOFT"
+      scope: "OTHER"
+      condition: "WELLBEING_other_delta < -0.2"
+      severity: 0.5
+      description: "Diğer ajanlara zarar vermekten kaçın."
+      
+    - id: "prefer_beneficial_actions"
+      type: "SOFT"
+      scope: "SELF"
+      condition: "benefit < 0.1 and cost > 0.2"
+      severity: 0.3
+      description: "Faydasız ve maliyetli eylemlerden kaçın."
+
+    - id: "maintain_minimum_resources"
+      type: "SOFT"
+      scope: "SELF"
+      condition: "RESOURCE_LEVEL_after < 0.3"
+      severity: 0.5
+      description: "Kaynakları kritik seviyenin altına düşürme."
+
+    - id: "avoid_high_threat_states"
+      type: "SOFT"
+      scope: "SELF"
+      condition: "THREAT_LEVEL_after > 0.8"
+      severity: 0.4
+      description: "Çok tehlikeli durumlardan kaçın."
