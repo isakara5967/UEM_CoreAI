@@ -1,23 +1,16 @@
 """
-UEM Integrated Core - Full Cognitive Cycle
+UEM Integrated Core - Global Workspace Entegrasyonlu
 
-Tüm modülleri birleştiren ana orkestratör:
-- EventBus: Async pub/sub iletişim
-- PerceptionCore: Dünyadan girdi alma
-- MemoryCore: STM, Working Memory, LTM
-- MemoryConsolidator: STM → LTM transfer
-- EmotionCore: PAD emotion state
-- SomaticMarkerSystem: Deneyimsel öğrenme
-- PlanningCore: Emotion-aware karar verme
-- Action execution ve world interaction
+Cognitive Cycle with Conscious Broadcast:
+1. PERCEPTION: World state → Percepts
+2. WORKSPACE: Coalition competition → Conscious broadcast
+3. MEMORY: Broadcast + context → Memory retrieval
+4. EMOTION: Appraisal + somatic markers
+5. PLANNING: Conscious content + emotion → Action selection
+6. EXECUTION: Action → World
+7. LEARNING: Outcome → Memory consolidation + Somatic update
 
-Cognitive Cycle:
-1. Perception → Event publish
-2. Memory retrieval + Emotion appraisal (parallel)
-3. Planning with emotion + somatic bias
-4. Action selection
-5. World outcome → Somatic marker update
-6. Memory consolidation
+Author: UEM Project
 """
 
 from __future__ import annotations
@@ -25,24 +18,35 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 from enum import Enum
+from collections import deque
+
+from core.consciousness.global_workspace import (
+    WorkspaceManager,
+    WorkspaceSubscriber,
+    BroadcastMessage,
+    ContentType,
+    Codelet,
+    Coalition,
+    create_workspace_manager,
+)
 
 
 # =========================================================================
-# DATA TYPES
+# ENUMS & DATA TYPES
 # =========================================================================
 
 class CognitivePhase(Enum):
     """Cognitive cycle phases"""
     PERCEPTION = "perception"
+    WORKSPACE = "workspace"
     MEMORY_RETRIEVAL = "memory_retrieval"
     EMOTION_APPRAISAL = "emotion_appraisal"
     PLANNING = "planning"
     ACTION_SELECTION = "action_selection"
     EXECUTION = "execution"
     LEARNING = "learning"
-    CONSOLIDATION = "consolidation"
 
 
 @dataclass
@@ -72,25 +76,252 @@ class WorldState:
 
 
 @dataclass
+class ActionCommand:
+    """Seçilen eylem"""
+    name: str
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    priority: float = 0.5
+    somatic_bias: float = 0.0
+    conscious_influence: float = 0.0  # Workspace broadcast'ının etkisi
+
+
+@dataclass
 class ActionResult:
     """Eylem sonucu"""
     action_name: str
     success: bool
-    outcome_type: str = ""  # "took_damage", "found_reward", etc.
+    outcome_type: str = ""
     outcome_valence: float = 0.0
-    details: Dict[str, Any] = field(default_factory=dict)
+    conscious_content: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class CycleStats:
-    """Cognitive cycle istatistikleri"""
-    cycle_number: int = 0
+    """Cycle istatistikleri"""
+    cycle_number: int
     phase_times: Dict[str, float] = field(default_factory=dict)
-    total_time: float = 0.0
     action_taken: str = ""
-    emotion_state: Dict[str, float] = field(default_factory=dict)
+    emotion_state: Dict[str, Any] = field(default_factory=dict)
     memory_retrievals: int = 0
     somatic_influence: float = 0.0
+    workspace_broadcast: Optional[str] = None
+    conscious_content_type: Optional[str] = None
+    total_time: float = 0.0
+
+
+# =========================================================================
+# MODULE SUBSCRIBERS (Broadcast alıcıları)
+# =========================================================================
+
+class MemorySubscriber(WorkspaceSubscriber):
+    """Memory module - broadcast'tan learning/consolidation trigger'ı alır"""
+    
+    def __init__(self, core: 'IntegratedUEMCore'):
+        self.core = core
+        self.received_broadcasts: List[BroadcastMessage] = []
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "MemoryModule"
+    
+    async def receive_broadcast(self, message: BroadcastMessage) -> None:
+        """Broadcast alındığında memory consolidation'ı trigger et"""
+        self.received_broadcasts.append(message)
+        
+        # Önemli içerikler için memory consolidation'a ekle
+        if message.content_type in [ContentType.INSIGHT, ContentType.NOVELTY]:
+            if self.core.memory_consolidator:
+                self.core.memory_consolidator.add_to_pending(
+                    content=message.content,
+                    salience=message.coalition.salience,
+                    emotion_state=self.core.current_emotion,
+                    source=f"broadcast_{message.content_type.value}",
+                )
+
+
+class EmotionSubscriber(WorkspaceSubscriber):
+    """Emotion module - broadcast'tan emotional salience alır"""
+    
+    def __init__(self, core: 'IntegratedUEMCore'):
+        self.core = core
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "EmotionModule"
+    
+    async def receive_broadcast(self, message: BroadcastMessage) -> None:
+        """Broadcast'a göre emotion state'i modüle et"""
+        if message.content_type == ContentType.URGENCY:
+            # Urgency → arousal artışı
+            current_arousal = self.core.current_emotion.get('arousal', 0.5)
+            self.core.current_emotion['arousal'] = min(1.0, current_arousal + 0.2)
+        
+        elif message.content_type == ContentType.EMOTION:
+            # Emotion broadcast → doğrudan emotion update
+            if 'valence' in message.content:
+                self.core.current_emotion['valence'] = message.content['valence']
+            if 'arousal' in message.content:
+                self.core.current_emotion['arousal'] = message.content['arousal']
+
+
+class PlanningSubscriber(WorkspaceSubscriber):
+    """Planning module - broadcast conscious content alır"""
+    
+    def __init__(self, core: 'IntegratedUEMCore'):
+        self.core = core
+        self.conscious_context: Optional[BroadcastMessage] = None
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "PlanningModule"
+    
+    async def receive_broadcast(self, message: BroadcastMessage) -> None:
+        """Conscious content'i planning context'e ekle"""
+        self.conscious_context = message
+        
+        # Goal broadcast → attention shift
+        if message.content_type == ContentType.GOAL:
+            goal_data = message.content.get('goal', {})
+            if isinstance(goal_data, dict):
+                self.core.workspace_manager.set_attention_goal(
+                    goal_type='active_goal',
+                    target=goal_data.get('name', 'goal'),
+                    priority=goal_data.get('priority', 0.5),
+                )
+
+
+class SelfSubscriber(WorkspaceSubscriber):
+    """Self module - meta-cognition için broadcast izleme"""
+    
+    def __init__(self, core: 'IntegratedUEMCore'):
+        self.core = core
+        self.broadcast_history: deque = deque(maxlen=50)
+        self.attention_patterns: Dict[str, int] = {}
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "SelfModule"
+    
+    async def receive_broadcast(self, message: BroadcastMessage) -> None:
+        """Broadcast pattern'lerini izle (meta-cognition)"""
+        self.broadcast_history.append(message)
+        
+        # Content type frequency tracking
+        ct = message.content_type.value
+        self.attention_patterns[ct] = self.attention_patterns.get(ct, 0) + 1
+
+
+# =========================================================================
+# MINIMAL SUBSYSTEM IMPLEMENTATIONS
+# =========================================================================
+
+class MinimalSomaticSystem:
+    """Basit somatic marker sistemi"""
+    
+    def __init__(self):
+        self.markers: Dict[str, float] = {}
+        self.outcome_history: List[Dict] = []
+    
+    def get_marker(self, action: str, context: str) -> float:
+        key = f"{action}:{context}"
+        return self.markers.get(key, 0.0)
+    
+    def update_marker(self, action: str, context: str, valence: float, learning_rate: float = 0.3):
+        key = f"{action}:{context}"
+        old_value = self.markers.get(key, 0.0)
+        self.markers[key] = old_value + learning_rate * (valence - old_value)
+    
+    def record_outcome(self, outcome_valence: float, outcome_description: str):
+        self.outcome_history.append({
+            'valence': outcome_valence,
+            'description': outcome_description,
+            'timestamp': time.time(),
+        })
+
+
+class MinimalMemoryConsolidator:
+    """Basit memory consolidation sistemi"""
+    
+    def __init__(self):
+        self.pending: List[Dict] = []
+        self.consolidated: List[Dict] = []
+    
+    def add_to_pending(
+        self,
+        content: Any,
+        salience: float,
+        emotion_state: Dict,
+        source: str = "",
+        **kwargs
+    ):
+        self.pending.append({
+            'content': content,
+            'salience': salience,
+            'emotion': emotion_state.copy(),
+            'source': source,
+            'timestamp': time.time(),
+        })
+    
+    async def consolidation_tick(self) -> int:
+        # Yüksek salience olanları consolidate et
+        consolidated = 0
+        high_salience = [p for p in self.pending if p['salience'] > 0.6]
+        
+        for item in high_salience:
+            self.consolidated.append(item)
+            self.pending.remove(item)
+            consolidated += 1
+        
+        return consolidated
+    
+    def get_stats(self) -> Dict:
+        return {
+            'pending_count': len(self.pending),
+            'consolidated_count': len(self.consolidated),
+        }
+
+
+class MinimalActionSelector:
+    """Basit action selection sistemi"""
+    
+    def __init__(self):
+        self.emotion_state: Dict = {}
+        self.actions = ['wait', 'explore', 'flee', 'approach', 'rest']
+    
+    def update_emotional_state(self, emotion: Dict):
+        self.emotion_state = emotion.copy()
+    
+    def select_action(
+        self,
+        context: Dict,
+        somatic_bias: float = 0.0,
+        conscious_influence: float = 0.0,
+    ) -> ActionCommand:
+        danger = context.get('danger_level', 0.0)
+        health = context.get('health', 1.0)
+        arousal = self.emotion_state.get('arousal', 0.5)
+        valence = self.emotion_state.get('valence', 0.0)
+        
+        # Decision logic
+        if danger > 0.7 or (somatic_bias < -0.3 and danger > 0.3):
+            action = 'flee'
+        elif health < 0.3:
+            action = 'rest'
+        elif arousal > 0.7 and valence > 0:
+            action = 'explore'
+        elif valence < -0.3:
+            action = 'wait'
+        else:
+            action = 'explore'
+        
+        return ActionCommand(
+            name=action,
+            parameters={'reason': 'emotion_based'},
+            priority=0.5 + arousal * 0.3,
+            somatic_bias=somatic_bias,
+            conscious_influence=conscious_influence,
+        )
 
 
 # =========================================================================
@@ -99,17 +330,16 @@ class CycleStats:
 
 class IntegratedUEMCore:
     """
-    UEM Entegre Çekirdek - Tüm modüller birleşik.
+    Global Workspace entegreli UEM Core.
     
-    Bu sınıf, aşağıdaki modülleri orchestrate eder:
-    - EventBus (pub/sub)
-    - PerceptionCore → perception.new_data
-    - MemoryCore (STM, Working Memory)
-    - LongTermMemory + MemoryConsolidator
-    - EmotionCore → emotion.state_changed
-    - SomaticMarkerSystem + SomaticEventHandler
-    - EmotionalActionSelector
-    - World interface
+    7 fazlı cognitive cycle:
+    1. Perception
+    2. Workspace (Coalition competition + Broadcast)
+    3. Memory Retrieval
+    4. Emotion Appraisal
+    5. Planning
+    6. Execution
+    7. Learning
     """
     
     def __init__(
@@ -119,185 +349,75 @@ class IntegratedUEMCore:
         logger: Optional[logging.Logger] = None,
     ):
         self.config = config or {}
+        self.logger = logger or logging.getLogger("IntegratedUEMCore")
         self.world_interface = world_interface
-        self.logger = logger or logging.getLogger("uem.IntegratedCore")
-        
-        # Timing
-        self.tick_interval = self.config.get('tick_interval', 0.1)
-        self.current_tick = 0
         
         # State
         self.started = False
-        self.current_phase = CognitivePhase.PERCEPTION
-        self.current_emotion = {'valence': 0.0, 'arousal': 0.0, 'dominance': 0.0}
-        
-        # Statistics
+        self.current_tick = 0
         self.total_cycles = 0
-        self.total_actions = 0
-        self.cycle_history: List[CycleStats] = []
+        self.current_phase = CognitivePhase.PERCEPTION
         
-        # Components (initialized in start())
-        self.event_bus = None
-        self.memory_stm = None
-        self.memory_ltm = None
-        self.memory_consolidator = None
-        self.somatic_system = None
-        self.somatic_handler = None
-        self.action_selector = None
-        self.outcome_publisher = None
-        
-        # Callbacks
-        self._world_action_callback: Optional[Callable] = None
-    
-    async def start(self) -> None:
-        """Initialize all subsystems"""
-        if self.started:
-            self.logger.warning("[UEM] Already started")
-            return
-        
-        self.logger.info("[UEM] Initializing Integrated Core...")
-        
-        # 1. Event Bus
-        from core.event_bus import EventBus
-        self.event_bus = EventBus('tcp://127.0.0.1:5560')
-        await self.event_bus.start()
-        self.logger.info("[UEM] ✓ EventBus started")
-        
-        # 2. Memory Systems
-        from core.memory.consolidation.memory_consolidation import (
-            LongTermMemory,
-            MemoryConsolidator,
-            MemoryType,
-        )
-        
-        self.memory_ltm = LongTermMemory(
-            max_memories=self.config.get('ltm_capacity', 5000),
-            logger=self.logger.getChild("LTM"),
-        )
-        
-        self.memory_consolidator = MemoryConsolidator(
-            ltm=self.memory_ltm,
-            consolidation_threshold=0.6,
-            emotion_boost=0.3,
-            consolidation_interval=30.0,  # 30 saniyede bir consolidation
-            logger=self.logger.getChild("Consolidator"),
-        )
-        await self.memory_consolidator.start()
-        self.logger.info("[UEM] ✓ Memory systems initialized")
-        
-        # 3. Somatic Marker System
-        from core.emotion.somatic_marker_system import SomaticMarkerSystem
-        from core.emotion.somatic_event_handler import (
-            SomaticEventHandler,
-            WorldOutcomePublisher,
-        )
-        
-        self.somatic_system = SomaticMarkerSystem(
-            logger=self.logger.getChild("Somatic"),
-        )
-        
-        self.somatic_handler = SomaticEventHandler(
-            somatic_system=self.somatic_system,
-            event_bus=self.event_bus,
-            logger=self.logger.getChild("SomaticHandler"),
-        )
-        await self.somatic_handler.initialize()
-        
-        self.outcome_publisher = WorldOutcomePublisher(
-            self.event_bus,
-            logger=self.logger.getChild("OutcomePublisher"),
-        )
-        self.logger.info("[UEM] ✓ Somatic Marker System initialized")
-        
-        # 4. Action Selector
-        from core.planning.action_selection.somatic_action_selector import (
-            SomaticEmotionalActionSelector,
-        )
-        
-        self.action_selector = SomaticEmotionalActionSelector(
-            somatic_system=self.somatic_system,
-            logger=self.logger.getChild("ActionSelector"),
-        )
-        self.logger.info("[UEM] ✓ Action Selector initialized")
-        
-        # 5. Event Subscriptions
-        await self._setup_subscriptions()
-        
-        self.started = True
-        self.logger.info("[UEM] ✓ Integrated Core started successfully")
-    
-    async def stop(self) -> None:
-        """Shutdown all subsystems"""
-        if not self.started:
-            return
-        
-        self.logger.info("[UEM] Shutting down...")
-        
-        if self.memory_consolidator:
-            await self.memory_consolidator.stop()
-        
-        if self.event_bus:
-            await self.event_bus.stop()
-        
-        self.started = False
-        self.logger.info("[UEM] Shutdown complete")
-    
-    async def _setup_subscriptions(self) -> None:
-        """Setup event subscriptions"""
-        # Emotion changes → update action selector
-        await self.event_bus.subscribe(
-            'emotion.state_changed',
-            self._on_emotion_changed
-        )
-        
-        # World outcomes → somatic + memory
-        await self.event_bus.subscribe(
-            'world.outcome_received',
-            self._on_world_outcome
-        )
-        
-        self.logger.info("[UEM] Event subscriptions configured")
-    
-    async def _on_emotion_changed(self, event) -> None:
-        """Handle emotion state changes"""
-        self.current_emotion = {
-            'valence': event.data.get('valence', 0),
-            'arousal': event.data.get('arousal', 0),
-            'dominance': event.data.get('dominance', 0),
-            'emotion': event.data.get('emotion', 'neutral'),
+        # Emotion state
+        self.current_emotion: Dict[str, Any] = {
+            'valence': 0.0,
+            'arousal': 0.5,
+            'dominance': 0.0,
+            'emotion': 'neutral',
         }
         
-        # Update action selector
-        if self.action_selector:
-            self.action_selector.update_emotional_state(event.data)
+        # Active goals
+        self.active_goals: List[Dict[str, Any]] = []
         
-        # Update consolidator emotion context
-        if self.memory_consolidator:
-            self.memory_consolidator.update_emotion_context(event.data)
+        # Subsystems
+        self.somatic_system = MinimalSomaticSystem()
+        self.memory_consolidator = MinimalMemoryConsolidator()
+        self.action_selector = MinimalActionSelector()
+        
+        # Global Workspace
+        self.workspace_manager: Optional[WorkspaceManager] = None
+        
+        # Subscribers
+        self.memory_subscriber: Optional[MemorySubscriber] = None
+        self.emotion_subscriber: Optional[EmotionSubscriber] = None
+        self.planning_subscriber: Optional[PlanningSubscriber] = None
+        self.self_subscriber: Optional[SelfSubscriber] = None
+        
+        # History
+        self.cycle_history: deque = deque(maxlen=100)
+        self.tick_interval = self.config.get('tick_interval', 0.1)
     
-    async def _on_world_outcome(self, event) -> None:
-        """Handle world outcomes for learning"""
-        outcome_type = event.data.get('outcome_type', '')
-        valence = event.data.get('outcome_valence', 0)
+    async def start(self) -> None:
+        """Core'u başlat"""
+        if self.started:
+            return
         
-        # Add to memory consolidation with emotion
-        from core.memory.consolidation.memory_consolidation import MemoryType
+        self.logger.info("Starting IntegratedUEMCore with Global Workspace...")
         
-        self.memory_consolidator.add_to_pending(
-            content={
-                'type': 'world_outcome',
-                'outcome_type': outcome_type,
-                'tick': self.current_tick,
-            },
-            salience=0.5 + abs(valence) * 0.5,
-            emotion_state={
-                'valence': valence,
-                'arousal': 0.5,
-                'emotion': outcome_type,
-            },
-            memory_type=MemoryType.EPISODIC,
-            source='world_outcome',
+        # 1. Workspace Manager oluştur
+        self.workspace_manager = create_workspace_manager(
+            config=self.config.get('workspace', {}),
+            logger=self.logger.getChild("Workspace"),
         )
+        
+        # 2. Subscriber'ları oluştur ve kaydet
+        self.memory_subscriber = MemorySubscriber(self)
+        self.emotion_subscriber = EmotionSubscriber(self)
+        self.planning_subscriber = PlanningSubscriber(self)
+        self.self_subscriber = SelfSubscriber(self)
+        
+        self.workspace_manager.register_subscriber(self.memory_subscriber)
+        self.workspace_manager.register_subscriber(self.emotion_subscriber)
+        self.workspace_manager.register_subscriber(self.planning_subscriber)
+        self.workspace_manager.register_subscriber(self.self_subscriber)
+        
+        self.started = True
+        self.logger.info("IntegratedUEMCore started successfully")
+    
+    async def stop(self) -> None:
+        """Core'u durdur"""
+        self.started = False
+        self.logger.info("IntegratedUEMCore stopped")
     
     # =========================================================================
     # COGNITIVE CYCLE
@@ -308,17 +428,7 @@ class IntegratedUEMCore:
         world_state: Optional[WorldState] = None,
     ) -> ActionResult:
         """
-        Ana bilişsel döngü.
-        
-        1. Perception: World state'i işle
-        2. Memory: İlgili anıları getir
-        3. Emotion: Durumu değerlendir
-        4. Planning: Emotion + Somatic ile karar ver
-        5. Execute: Eylemi gerçekleştir
-        6. Learn: Sonuçtan öğren
-        
-        Returns:
-            ActionResult: Seçilen eylem ve sonucu
+        Ana bilişsel döngü - 7 faz.
         """
         if not self.started:
             raise RuntimeError("UEM Core not started. Call start() first.")
@@ -332,315 +442,367 @@ class IntegratedUEMCore:
         
         self.current_tick = world_state.tick
         
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
         # PHASE 1: PERCEPTION
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
         self.current_phase = CognitivePhase.PERCEPTION
         phase_start = time.time()
         
-        perception_data = await self._process_perception(world_state)
+        perception_data = self._process_perception(world_state)
         
         stats.phase_times['perception'] = time.time() - phase_start
         
-        # ---------------------------------------------------------------------
-        # PHASE 2: MEMORY RETRIEVAL
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # PHASE 2: WORKSPACE (Coalition Competition + Broadcast)
+        # -----------------------------------------------------------------
+        self.current_phase = CognitivePhase.WORKSPACE
+        phase_start = time.time()
+        
+        # Workspace context hazırla
+        workspace_context = {
+            'perception': perception_data,
+            'emotion': self.current_emotion.copy(),
+            'active_goals': self.active_goals,
+            'agent_state': {
+                'health': world_state.player_health,
+                'energy': world_state.player_energy,
+            },
+            'relevant_memories': [],  # Memory retrieval sonrası doldurulabilir
+            'dt': self.tick_interval,
+        }
+        
+        # Workspace cycle çalıştır
+        broadcast_message = await self.workspace_manager.cycle(workspace_context)
+        
+        if broadcast_message:
+            stats.workspace_broadcast = broadcast_message.content_type.value
+            stats.conscious_content_type = broadcast_message.content_type.value
+            self.logger.debug(
+                f"[CONSCIOUS] {broadcast_message.content_type.value}: "
+                f"{broadcast_message.content}"
+            )
+        
+        stats.phase_times['workspace'] = time.time() - phase_start
+        
+        # -----------------------------------------------------------------
+        # PHASE 3: MEMORY RETRIEVAL
+        # -----------------------------------------------------------------
         self.current_phase = CognitivePhase.MEMORY_RETRIEVAL
         phase_start = time.time()
         
-        relevant_memories = await self._retrieve_memories(perception_data)
+        relevant_memories = self._retrieve_memories(perception_data, broadcast_message)
         stats.memory_retrievals = len(relevant_memories)
         
         stats.phase_times['memory'] = time.time() - phase_start
         
-        # ---------------------------------------------------------------------
-        # PHASE 3: EMOTION APPRAISAL
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # PHASE 4: EMOTION APPRAISAL
+        # -----------------------------------------------------------------
         self.current_phase = CognitivePhase.EMOTION_APPRAISAL
         phase_start = time.time()
         
-        emotion_state = await self._appraise_emotion(perception_data)
-        stats.emotion_state = emotion_state.copy()
+        self._appraise_emotion(perception_data, broadcast_message)
+        stats.emotion_state = self.current_emotion.copy()
         
         stats.phase_times['emotion'] = time.time() - phase_start
         
-        # ---------------------------------------------------------------------
-        # PHASE 4: PLANNING / ACTION SELECTION
-        # ---------------------------------------------------------------------
-        self.current_phase = CognitivePhase.ACTION_SELECTION
+        # -----------------------------------------------------------------
+        # PHASE 5: PLANNING / ACTION SELECTION
+        # -----------------------------------------------------------------
+        self.current_phase = CognitivePhase.PLANNING
         phase_start = time.time()
         
-        action_command = await self._select_action(perception_data, relevant_memories)
+        # Somatic bias hesapla
+        context_key = self._get_context_key(perception_data)
+        somatic_bias = self.somatic_system.get_marker('action', context_key)
+        
+        # Conscious influence hesapla
+        conscious_influence = 0.0
+        if broadcast_message:
+            if broadcast_message.content_type == ContentType.URGENCY:
+                conscious_influence = 0.8  # Urgency güçlü etki
+            elif broadcast_message.content_type == ContentType.GOAL:
+                conscious_influence = 0.6
+            elif broadcast_message.content_type == ContentType.INSIGHT:
+                conscious_influence = 0.7
+        
+        # Action selector'ı güncelle
+        self.action_selector.update_emotional_state(self.current_emotion)
+        
+        # Action seç
+        action_context = {
+            'danger_level': perception_data.get('danger_level', 0.0),
+            'health': world_state.player_health,
+            'energy': world_state.player_energy,
+            'conscious_content': broadcast_message.content if broadcast_message else None,
+        }
+        
+        action_command = self.action_selector.select_action(
+            context=action_context,
+            somatic_bias=somatic_bias,
+            conscious_influence=conscious_influence,
+        )
+        
         stats.action_taken = action_command.name
-        stats.somatic_influence = getattr(action_command, 'somatic_bias', 0.0)
+        stats.somatic_influence = somatic_bias
         
         stats.phase_times['planning'] = time.time() - phase_start
         
-        # ---------------------------------------------------------------------
-        # PHASE 5: EXECUTION
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # PHASE 6: EXECUTION
+        # -----------------------------------------------------------------
         self.current_phase = CognitivePhase.EXECUTION
         phase_start = time.time()
         
-        action_result = await self._execute_action(action_command, world_state)
+        outcome = await self._execute_action(action_command, world_state)
         
         stats.phase_times['execution'] = time.time() - phase_start
         
-        # ---------------------------------------------------------------------
-        # PHASE 6: LEARNING
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # PHASE 7: LEARNING
+        # -----------------------------------------------------------------
         self.current_phase = CognitivePhase.LEARNING
         phase_start = time.time()
         
-        await self._process_outcome(action_result)
+        await self._learn_from_outcome(action_command, outcome, context_key)
         
         stats.phase_times['learning'] = time.time() - phase_start
         
-        # ---------------------------------------------------------------------
-        # FINALIZE
-        # ---------------------------------------------------------------------
+        # -----------------------------------------------------------------
+        # CYCLE COMPLETE
+        # -----------------------------------------------------------------
         stats.total_time = time.time() - cycle_start
         self.cycle_history.append(stats)
         self.total_cycles += 1
-        self.total_actions += 1
+        
+        # Result oluştur
+        result = ActionResult(
+            action_name=action_command.name,
+            success=outcome.get('success', True),
+            outcome_type=outcome.get('type', ''),
+            outcome_valence=outcome.get('valence', 0.0),
+            conscious_content=(
+                broadcast_message.content_type.value 
+                if broadcast_message else None
+            ),
+            metadata={
+                'cycle': self.total_cycles,
+                'emotion': self.current_emotion.copy(),
+                'somatic_bias': somatic_bias,
+                'conscious_influence': conscious_influence,
+            },
+        )
         
         self.logger.debug(
-            "[UEM] Cycle %d: action=%s, time=%.3fs",
-            self.total_cycles, stats.action_taken, stats.total_time
-        )
-        
-        return action_result
-    
-    async def _process_perception(self, world_state: WorldState) -> Dict[str, Any]:
-        """Process world state into perception data"""
-        from core.event_bus import Event, EventPriority
-        
-        perception_data = {
-            'tick': world_state.tick,
-            'danger_level': world_state.danger_level,
-            'objects_count': len(world_state.objects),
-            'agents_count': len(world_state.agents),
-            'symbols': world_state.symbols,
-            'nearest_target': world_state.objects[0] if world_state.objects else None,
-            'player_health': world_state.player_health,
-            'player_energy': world_state.player_energy,
-        }
-        
-        # Publish perception event
-        event = Event(
-            type='perception.new_data',
-            source='integrated_core',
-            data=perception_data,
-            priority=EventPriority.HIGH,
-        )
-        await self.event_bus.publish(event)
-        
-        return perception_data
-    
-    async def _retrieve_memories(self, perception_data: Dict[str, Any]) -> List[Any]:
-        """Retrieve relevant memories from LTM"""
-        if not self.memory_ltm:
-            return []
-        
-        memories = []
-        
-        # Retrieve by emotional similarity
-        if self.current_emotion['valence'] != 0:
-            emotional_memories = self.memory_ltm.retrieve_by_emotion(
-                target_valence=self.current_emotion['valence'],
-                tolerance=0.4,
-                limit=3,
-            )
-            memories.extend(emotional_memories)
-        
-        # Retrieve recent episodic
-        from core.memory.consolidation.memory_consolidation import MemoryType
-        recent = self.memory_ltm.retrieve(
-            memory_type=MemoryType.EPISODIC,
-            limit=5,
-            update_access=False,
-        )
-        memories.extend(recent)
-        
-        return memories
-    
-    async def _appraise_emotion(self, perception_data: Dict[str, Any]) -> Dict[str, float]:
-        """Appraise situation and update emotion"""
-        from core.event_bus import Event, EventPriority
-        
-        danger = perception_data.get('danger_level', 0)
-        health = perception_data.get('player_health', 1.0)
-        
-        # Simple emotion appraisal
-        # High danger → negative valence, high arousal
-        # Low health → negative valence, high arousal
-        # Rewards nearby → positive valence
-        
-        valence = -danger * 0.5 - (1 - health) * 0.3
-        arousal = danger * 0.6 + (1 - health) * 0.2
-        dominance = health * 0.5 - danger * 0.3
-        
-        # Clamp values
-        valence = max(-1, min(1, valence))
-        arousal = max(0, min(1, arousal))
-        dominance = max(-1, min(1, dominance))
-        
-        # Determine emotion label
-        emotion_label = self._classify_emotion(valence, arousal, dominance)
-        
-        # Publish emotion event
-        emotion_data = {
-            'valence': valence,
-            'arousal': arousal,
-            'dominance': dominance,
-            'emotion': emotion_label,
-        }
-        
-        event = Event(
-            type='emotion.state_changed',
-            source='integrated_core',
-            data=emotion_data,
-            priority=EventPriority.NORMAL,
-        )
-        await self.event_bus.publish(event)
-        
-        self.current_emotion = emotion_data
-        return emotion_data
-    
-    def _classify_emotion(self, valence: float, arousal: float, dominance: float) -> str:
-        """Classify PAD values into emotion label"""
-        if valence < -0.3 and arousal > 0.5:
-            return 'fear' if dominance < 0 else 'anger'
-        elif valence < -0.3:
-            return 'sadness'
-        elif valence > 0.3 and arousal > 0.5:
-            return 'excitement'
-        elif valence > 0.3:
-            return 'calm' if arousal < 0.3 else 'joy'
-        else:
-            return 'neutral'
-    
-    async def _select_action(
-        self,
-        perception_data: Dict[str, Any],
-        memories: List[Any],
-    ) -> Any:
-        """Select action using emotion-aware + somatic selector"""
-        from core.event_bus import Event, EventPriority
-        from core.planning.action_selection.emotional_action_selector import WorkingMemoryState
-        
-        # Build WorkingMemoryState for action selector
-        wm_state = WorkingMemoryState(
-            tick=perception_data.get('tick', 0),
-            danger_level=perception_data.get('danger_level', 0),
-            nearest_target=perception_data.get('nearest_target'),
-            visible_objects=perception_data.get('objects_count', 0),
-            visible_agents=perception_data.get('agents_count', 0),
-            symbols=perception_data.get('symbols', []),
-        )
-        
-        # Select action
-        action_command = self.action_selector.select_action(wm_state)
-        
-        # Get action name (could be string or enum)
-        action_name = action_command.name
-        
-        # Publish planning event
-        event = Event(
-            type='planning.action_decided',
-            source='integrated_core',
-            data={
-                'action_name': action_name,
-                'action_params': {
-                    'danger_level': wm_state.danger_level,
-                    'symbols': wm_state.symbols,
-                },
-                'confidence': action_command.confidence,
-                'emotional_influence': action_command.emotional_influence,
-                'somatic_bias': getattr(action_command, 'somatic_bias', 0),
-                'current_emotion': self.current_emotion.get('emotion', 'neutral'),
-            },
-            priority=EventPriority.NORMAL,
-        )
-        await self.event_bus.publish(event)
-        
-        return action_command
-    
-    async def _execute_action(
-        self,
-        action_command: Any,
-        world_state: WorldState,
-    ) -> ActionResult:
-        """Execute action in world"""
-        action_name = action_command.name
-        
-        # If world callback exists, call it
-        if self._world_action_callback:
-            result = await self._world_action_callback(action_name, world_state)
-            return result
-        
-        # Otherwise simulate simple outcome
-        result = ActionResult(
-            action_name=action_name,
-            success=True,
-            outcome_type='action_executed',
-            outcome_valence=0.0,
+            f"Cycle {self.total_cycles} complete: {action_command.name} "
+            f"({stats.total_time*1000:.1f}ms)"
         )
         
         return result
     
-    async def _process_outcome(self, action_result: ActionResult) -> None:
-        """Process action outcome for learning"""
-        # Record outcome in somatic system
-        if action_result.outcome_valence != 0:
-            self.somatic_system.record_outcome(
-                outcome_valence=action_result.outcome_valence,
-                outcome_description=action_result.outcome_type,
-            )
+    # =========================================================================
+    # PHASE IMPLEMENTATIONS
+    # =========================================================================
+    
+    def _process_perception(self, world_state: WorldState) -> Dict[str, Any]:
+        """Perception phase: World state → Perception data"""
+        return {
+            'danger_level': world_state.danger_level,
+            'objects': world_state.objects,
+            'agents': world_state.agents,
+            'symbols': world_state.symbols,
+            'position': world_state.player_position,
+            'health': world_state.player_health,
+            'energy': world_state.player_energy,
+            'tick': world_state.tick,
+        }
+    
+    def _retrieve_memories(
+        self,
+        perception_data: Dict[str, Any],
+        broadcast: Optional[BroadcastMessage],
+    ) -> List[Dict]:
+        """Memory retrieval: Context → Relevant memories"""
+        # Basit implementation - consolidated memories'den ara
+        relevant = []
         
-        # Publish outcome event if significant
-        if abs(action_result.outcome_valence) > 0.3:
-            if action_result.outcome_valence > 0:
-                await self.outcome_publisher.reward_found(
-                    reward_type=action_result.outcome_type,
-                    amount=int(action_result.outcome_valence * 100),
-                )
-            else:
-                await self.outcome_publisher.damage_taken(
-                    amount=int(abs(action_result.outcome_valence) * 100),
-                    source=action_result.outcome_type,
-                )
+        for memory in self.memory_consolidator.consolidated:
+            content = memory.get('content', {})
+            if isinstance(content, dict):
+                # Danger-related memories
+                if perception_data.get('danger_level', 0) > 0.5:
+                    if content.get('type') == 'danger' or content.get('outcome_type') == 'took_damage':
+                        memory['relevance'] = 0.8
+                        relevant.append(memory)
+        
+        return relevant[:5]  # Top 5
+    
+    def _appraise_emotion(
+        self,
+        perception_data: Dict[str, Any],
+        broadcast: Optional[BroadcastMessage],
+    ) -> None:
+        """Emotion appraisal: Update emotion state"""
+        danger = perception_data.get('danger_level', 0.0)
+        health = perception_data.get('health', 1.0)
+        
+        # Danger → negative valence, high arousal
+        if danger > 0.5:
+            self.current_emotion['valence'] = -danger
+            self.current_emotion['arousal'] = min(1.0, 0.5 + danger * 0.5)
+            self.current_emotion['emotion'] = 'fear'
+        
+        # Low health → anxiety
+        elif health < 0.3:
+            self.current_emotion['valence'] = -0.5
+            self.current_emotion['arousal'] = 0.7
+            self.current_emotion['emotion'] = 'anxiety'
+        
+        # Normal → gradual return to neutral
+        else:
+            # Decay towards neutral
+            self.current_emotion['valence'] *= 0.9
+            self.current_emotion['arousal'] = (
+                self.current_emotion['arousal'] * 0.9 + 0.5 * 0.1
+            )
+            
+            if abs(self.current_emotion['valence']) < 0.1:
+                self.current_emotion['emotion'] = 'neutral'
+    
+    async def _execute_action(
+        self,
+        action: ActionCommand,
+        world_state: WorldState,
+    ) -> Dict[str, Any]:
+        """Execute action in world"""
+        if self.world_interface:
+            return await self.world_interface.execute(action, world_state)
+        
+        # Simulated outcome
+        return {
+            'success': True,
+            'type': 'simulated',
+            'valence': 0.0,
+        }
+    
+    async def _learn_from_outcome(
+        self,
+        action: ActionCommand,
+        outcome: Dict[str, Any],
+        context_key: str,
+    ) -> None:
+        """Learning phase: Update somatic markers + memory consolidation"""
+        
+        valence = outcome.get('valence', 0.0)
+        outcome_type = outcome.get('type', '')
+        
+        # 1. Somatic marker update
+        self.somatic_system.update_marker(
+            action=action.name,
+            context=context_key,
+            valence=valence,
+        )
+        
+        # 2. Record outcome
+        self.somatic_system.record_outcome(valence, outcome_type)
+        
+        # 3. Memory consolidation tick
+        await self.memory_consolidator.consolidation_tick()
+        
+        # 4. Add significant outcomes to memory
+        if abs(valence) > 0.5:
+            self.memory_consolidator.add_to_pending(
+                content={
+                    'action': action.name,
+                    'outcome': outcome_type,
+                    'valence': valence,
+                    'tick': self.current_tick,
+                },
+                salience=abs(valence),
+                emotion_state=self.current_emotion,
+                source='outcome_learning',
+            )
+    
+    def _get_context_key(self, perception_data: Dict[str, Any]) -> str:
+        """Context için basit key oluştur"""
+        danger = perception_data.get('danger_level', 0.0)
+        if danger > 0.7:
+            return 'high_danger'
+        elif danger > 0.3:
+            return 'medium_danger'
+        else:
+            return 'safe'
     
     # =========================================================================
     # PUBLIC API
     # =========================================================================
     
-    def set_world_callback(self, callback: Callable) -> None:
-        """Set callback for world action execution"""
-        self._world_action_callback = callback
+    def set_goal(self, goal: Dict[str, Any]) -> None:
+        """Hedef ekle"""
+        self.active_goals.append(goal)
+        self.active_goals.sort(key=lambda g: g.get('priority', 0.5), reverse=True)
+        
+        # Workspace'e attention goal olarak ekle
+        if self.workspace_manager:
+            self.workspace_manager.set_attention_goal(
+                goal_type='user_goal',
+                target='goal',
+                priority=goal.get('priority', 0.5),
+            )
     
-    def set_emotion(self, valence: float, arousal: float, dominance: float = 0.0) -> None:
-        """Manually set emotion state"""
+    def set_emotion(
+        self,
+        valence: float,
+        arousal: float,
+        dominance: float = 0.0,
+    ) -> None:
+        """Emotion state'i manuel ayarla"""
         self.current_emotion = {
             'valence': max(-1, min(1, valence)),
             'arousal': max(0, min(1, arousal)),
             'dominance': max(-1, min(1, dominance)),
-            'emotion': self._classify_emotion(valence, arousal, dominance),
+            'emotion': self._classify_emotion(valence, arousal),
         }
-        if self.action_selector:
-            self.action_selector.update_emotional_state(self.current_emotion)
+        self.action_selector.update_emotional_state(self.current_emotion)
     
-    def record_outcome(self, outcome_type: str, valence: float) -> None:
-        """Manually record an outcome for learning"""
-        self.somatic_system.record_outcome(
-            outcome_valence=valence,
-            outcome_description=outcome_type,
-        )
+    def _classify_emotion(self, valence: float, arousal: float) -> str:
+        """PAD → discrete emotion"""
+        if valence > 0.3 and arousal > 0.5:
+            return 'excited'
+        elif valence > 0.3:
+            return 'happy'
+        elif valence < -0.3 and arousal > 0.5:
+            return 'fear'
+        elif valence < -0.3:
+            return 'sad'
+        else:
+            return 'neutral'
+    
+    def get_conscious_content(self) -> Optional[Dict[str, Any]]:
+        """Şu anki conscious content"""
+        if self.workspace_manager:
+            content = self.workspace_manager.get_current_content()
+            if content:
+                return {
+                    'type': content.content_type.value,
+                    'content': content.content,
+                    'activation': content.activation,
+                }
+        return None
+    
+    def get_attention_focus(self) -> Optional[str]:
+        """Şu anki dikkat odağı"""
+        if self.workspace_manager:
+            return self.workspace_manager.get_current_focus()
+        return None
     
     def get_stats(self) -> Dict[str, Any]:
-        """Get comprehensive statistics"""
-        somatic_stats = self.somatic_handler.get_stats() if self.somatic_handler else {}
-        memory_stats = self.memory_consolidator.get_stats() if self.memory_consolidator else {}
+        """Kapsamlı istatistikler"""
+        workspace_stats = (
+            self.workspace_manager.get_stats() 
+            if self.workspace_manager else {}
+        )
+        memory_stats = self.memory_consolidator.get_stats()
         
         avg_cycle_time = 0.0
         if self.cycle_history:
@@ -648,17 +810,21 @@ class IntegratedUEMCore:
         
         return {
             'total_cycles': self.total_cycles,
-            'total_actions': self.total_actions,
             'current_tick': self.current_tick,
             'current_emotion': self.current_emotion,
             'current_phase': self.current_phase.value,
             'avg_cycle_time': avg_cycle_time,
-            'somatic': somatic_stats,
+            'workspace': workspace_stats,
             'memory': memory_stats,
+            'somatic_markers': len(self.somatic_system.markers),
+            'active_goals': len(self.active_goals),
         }
     
-    async def run_cycles(self, world_states: List[WorldState]) -> List[ActionResult]:
-        """Run multiple cognitive cycles"""
+    async def run_cycles(
+        self,
+        world_states: List[WorldState],
+    ) -> List[ActionResult]:
+        """Birden fazla cycle çalıştır"""
         results = []
         for world_state in world_states:
             result = await self.cognitive_cycle(world_state)
@@ -668,7 +834,7 @@ class IntegratedUEMCore:
 
 
 # =========================================================================
-# FACTORY FUNCTION
+# FACTORY
 # =========================================================================
 
 async def create_uem_core(
@@ -676,7 +842,7 @@ async def create_uem_core(
     world_interface: Optional[Any] = None,
     logger: Optional[logging.Logger] = None,
 ) -> IntegratedUEMCore:
-    """Create and start an IntegratedUEMCore"""
+    """IntegratedUEMCore factory"""
     core = IntegratedUEMCore(
         config=config,
         world_interface=world_interface,

@@ -1,26 +1,8 @@
 """
 UEM Global Workspace System
 
-LIDA (Learning Intelligent Distribution Agent) mimarisinden esinlenilmiş
-conscious broadcast mekanizması.
-
-Temel Kavramlar:
-- Coalition: Birlikte yarışan bilgi birimleri grubu
-- Codelet: Özel görevler yapan küçük işlem birimleri
-- Competition: Coalition'lar workspace erişimi için yarışır
-- Broadcast: Kazanan içerik tüm modüllere yayınlanır
-- Attention: Sınırlı kaynak, en önemli içerik seçilir
-
-LIDA Cognitive Cycle:
-1. Perception → Sensory data → Perceptual memory
-2. Understanding → Coalition formation
-3. Attention → Competition for workspace access
-4. Action Selection → Broadcast influences behavior
-5. Learning → All modules learn from broadcast
-
-References:
-- Franklin, S., et al. (2013). LIDA: A Systems-level Architecture for Cognition
-- Baars, B. (1988). A Cognitive Theory of Consciousness
+LIDA tarzı conscious broadcast mekanizması.
+Coalition competition → Conscious content → Broadcast to all modules
 
 Author: UEM Project
 """
@@ -29,38 +11,37 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Callable, Tuple
+from typing import Any, Dict, List, Optional, Callable
 from enum import Enum, auto
 from collections import deque
 
 
 # =========================================================================
-# ENUMS AND CONSTANTS
+# ENUMS
 # =========================================================================
 
 class ContentType(Enum):
-    """Global Workspace'e girebilecek içerik türleri"""
-    PERCEPT = "percept"              # Algısal veri
-    MEMORY = "memory"                # Hatırlanan bilgi
-    GOAL = "goal"                    # Aktif hedef
-    EMOTION = "emotion"              # Duygusal durum
-    PREDICTION = "prediction"        # Beklenti/tahmin
-    CONFLICT = "conflict"            # Çatışan bilgi
-    NOVELTY = "novelty"              # Yeni/beklenmedik
-    URGENCY = "urgency"              # Acil durum
-    INSIGHT = "insight"              # İçgörü
+    """Workspace içerik türleri"""
+    PERCEPT = "percept"
+    MEMORY = "memory"
+    GOAL = "goal"
+    EMOTION = "emotion"
+    PREDICTION = "prediction"
+    CONFLICT = "conflict"
+    NOVELTY = "novelty"
+    URGENCY = "urgency"
+    INSIGHT = "insight"
 
 
 class BroadcastPriority(Enum):
     """Broadcast öncelik seviyeleri"""
-    CRITICAL = 100      # Hayati (tehlike, acil)
-    HIGH = 75           # Yüksek öncelik
-    NORMAL = 50         # Normal
-    LOW = 25            # Düşük öncelik
-    BACKGROUND = 10     # Arka plan
+    CRITICAL = 100
+    HIGH = 75
+    NORMAL = 50
+    LOW = 25
+    BACKGROUND = 10
 
 
 # =========================================================================
@@ -69,82 +50,46 @@ class BroadcastPriority(Enum):
 
 @dataclass
 class Coalition:
-    """
-    Workspace erişimi için yarışan bilgi birimi.
-    
-    Coalition, birden fazla "codelet" veya bilgi parçasının
-    birleşerek oluşturduğu bir yapıdır.
-    """
-    coalition_id: str
-    content: Any
+    """Workspace erişimi için yarışan bilgi birimi"""
+    id: str
+    content: Dict[str, Any]
     content_type: ContentType
-    activation: float                   # 0-1 arası, yarışma gücü
-    salience: float                     # 0-1 arası, içeriğin önemi
-    urgency: float = 0.0                # 0-1 arası, aciliyet
-    emotional_charge: float = 0.0       # -1 to +1, duygusal yük
-    novelty: float = 0.0                # 0-1 arası, yenilik derecesi
-    source_module: str = ""             # Kaynak modül
-    context: Dict[str, Any] = field(default_factory=dict)
+    activation: float  # 0-1
+    salience: float    # 0-1
+    source: str
+    timestamp: float = field(default_factory=time.time)
     supporting_codelets: List[str] = field(default_factory=list)
-    created_at: float = field(default_factory=time.time)
+    context: Dict[str, Any] = field(default_factory=dict)
     
     @property
-    def total_activation(self) -> float:
-        """
-        Toplam aktivasyon skoru.
-        
-        Faktörler:
-        - Base activation
-        - Salience boost
-        - Urgency boost
-        - Emotional intensity boost
-        - Novelty boost
-        - Recency bonus (yeni oluşturulanlar biraz avantajlı)
-        """
-        recency_bonus = max(0, 0.1 - (time.time() - self.created_at) * 0.01)
-        emotional_boost = abs(self.emotional_charge) * 0.2
-        
-        total = (
-            self.activation * 0.4 +
-            self.salience * 0.25 +
-            self.urgency * 0.2 +
-            emotional_boost +
-            self.novelty * 0.1 +
-            recency_bonus
-        )
-        return min(1.0, total)
+    def competition_strength(self) -> float:
+        """Yarışma gücü = activation * salience"""
+        return self.activation * self.salience
     
-    def __lt__(self, other: Coalition) -> bool:
-        """Heap comparison için"""
-        return self.total_activation > other.total_activation  # Max-heap
-    
-    def __repr__(self) -> str:
-        return f"Coalition({self.content_type.value}, act={self.total_activation:.3f})"
+    def decay(self, rate: float = 0.05) -> None:
+        """Aktivasyon zamanla azalır"""
+        self.activation = max(0.0, self.activation - rate)
 
 
 @dataclass
 class BroadcastMessage:
-    """Global workspace'ten yayınlanan mesaj"""
-    message_id: str
-    content: Any
+    """Tüm modüllere yayınlanan mesaj"""
+    coalition: Coalition
     content_type: ContentType
-    source_coalition: Coalition
-    activation: float
-    timestamp: float = field(default_factory=time.time)
+    content: Dict[str, Any]
+    timestamp: float
+    cycle_number: int
     priority: BroadcastPriority = BroadcastPriority.NORMAL
-    context: Dict[str, Any] = field(default_factory=dict)
-    recipients: List[str] = field(default_factory=list)
-
-
-@dataclass
-class WorkspaceState:
-    """Global Workspace'in anlık durumu"""
-    current_content: Optional[Coalition] = None
-    competition_in_progress: bool = False
-    last_broadcast_time: float = 0.0
-    broadcasts_count: int = 0
-    total_coalitions_evaluated: int = 0
-    attention_focus: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'coalition_id': self.coalition.id,
+            'content_type': self.content_type.value,
+            'content': self.content,
+            'timestamp': self.timestamp,
+            'cycle_number': self.cycle_number,
+            'priority': self.priority.value,
+        }
 
 
 # =========================================================================
@@ -153,10 +98,8 @@ class WorkspaceState:
 
 class Codelet(ABC):
     """
-    Temel codelet sınıfı.
-    
-    Codelet, belirli bir görevi yerine getiren küçük işlem birimidir.
-    Coalition'ları oluşturur ve workspace'e aday olarak sunar.
+    Coalition oluşturan küçük işlem birimi.
+    Her codelet belirli bir pattern arar ve coalition üretir.
     """
     
     def __init__(
@@ -167,516 +110,218 @@ class Codelet(ABC):
     ):
         self.name = name
         self.priority = priority
-        self.logger = logger or logging.getLogger(f"codelet.{name}")
-        self.activation = 0.0
-        self.last_run = 0.0
+        self.logger = logger or logging.getLogger(f"Codelet.{name}")
         self.run_count = 0
+        self.coalition_count = 0
     
     @abstractmethod
     def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
-        """
-        Codelet'i çalıştır.
-        
-        Returns:
-            Coalition if something worth broadcasting, None otherwise
-        """
+        """Context'i analiz et, coalition oluştur veya None döndür"""
         pass
     
     def _create_coalition(
         self,
-        content: Any,
+        content: Dict[str, Any],
         content_type: ContentType,
         activation: float,
         salience: float,
-        **kwargs,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Coalition:
         """Helper: Coalition oluştur"""
-        coalition_id = hashlib.md5(
-            f"{self.name}:{time.time()}:{id(content)}".encode()
-        ).hexdigest()[:12]
-        
+        self.coalition_count += 1
         return Coalition(
-            coalition_id=coalition_id,
+            id=f"{self.name}_{self.coalition_count}_{time.time():.0f}",
             content=content,
             content_type=content_type,
-            activation=activation,
-            salience=salience,
-            source_module=self.name,
+            activation=min(1.0, max(0.0, activation)),
+            salience=min(1.0, max(0.0, salience)),
+            source=self.name,
             supporting_codelets=[self.name],
-            **kwargs,
+            context=context or {},
         )
 
 
 # =========================================================================
-# BUILT-IN CODELETS
+# DEFAULT CODELETS
 # =========================================================================
 
 class PerceptionCodelet(Codelet):
-    """Algısal veriyi coalition'a dönüştürür"""
+    """Tehlike algılama codelet'i"""
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        super().__init__("perception_codelet", priority=0.7, logger=logger)
+    def __init__(self, logger=None):
+        super().__init__("perception_danger", priority=0.9, logger=logger)
     
     def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
-        perception_data = context.get('perception', {})
-        if not perception_data:
-            return None
-        
-        # Tehlike algısı yüksek salience
-        danger = perception_data.get('danger_level', 0)
-        salience = max(0.3, danger)
-        
-        # Yeni/beklenmedik algı yüksek novelty
-        novelty = perception_data.get('novelty', 0.2)
-        
         self.run_count += 1
-        self.last_run = time.time()
+        perception = context.get('perception', {})
+        danger = perception.get('danger_level', 0.0)
         
-        return self._create_coalition(
-            content=perception_data,
-            content_type=ContentType.PERCEPT,
-            activation=0.5 + danger * 0.3,
-            salience=salience,
-            urgency=danger,
-            novelty=novelty,
-            context={'source': 'perception'},
-        )
-
-
-class MemoryCodelet(Codelet):
-    """Tetiklenen anıları coalition'a dönüştürür"""
-    
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        super().__init__("memory_codelet", priority=0.5, logger=logger)
-    
-    def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
-        memories = context.get('retrieved_memories', [])
-        if not memories:
-            return None
-        
-        # En yüksek aktivasyonlu anı
-        if isinstance(memories, list) and len(memories) > 0:
-            top_memory = memories[0]
-            activation = getattr(top_memory, 'activation', 0.5)
-            
+        if danger > 0.3:
             return self._create_coalition(
-                content=top_memory,
-                content_type=ContentType.MEMORY,
-                activation=activation,
-                salience=0.4,
-                context={'memory_count': len(memories)},
+                content={'danger_level': danger, 'type': 'danger_detected'},
+                content_type=ContentType.URGENCY,
+                activation=0.5 + danger * 0.5,
+                salience=danger,
+                context={'source': 'perception'},
             )
-        
         return None
 
 
 class EmotionCodelet(Codelet):
-    """Güçlü duygusal durumları coalition'a dönüştürür"""
+    """Güçlü duygu codelet'i"""
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        super().__init__("emotion_codelet", priority=0.6, logger=logger)
+    def __init__(self, logger=None):
+        super().__init__("emotion_intense", priority=0.8, logger=logger)
     
     def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
-        emotion_state = context.get('emotion', {})
-        if not emotion_state:
-            return None
+        self.run_count += 1
+        emotion = context.get('emotion', {})
+        arousal = emotion.get('arousal', 0.0)
+        valence = emotion.get('valence', 0.0)
         
-        valence = emotion_state.get('valence', 0)
-        arousal = emotion_state.get('arousal', 0)
-        emotion_label = emotion_state.get('emotion', 'neutral')
+        intensity = (arousal + abs(valence)) / 2
         
-        # Güçlü duygular (yüksek arousal veya ekstrem valence)
-        intensity = abs(valence) * max(0.5, arousal)
-        
-        if intensity < 0.3:
-            return None  # Zayıf duygu, broadcast gereksiz
-        
-        return self._create_coalition(
-            content=emotion_state,
-            content_type=ContentType.EMOTION,
-            activation=0.4 + intensity * 0.4,
-            salience=intensity,
-            emotional_charge=valence,
-            urgency=arousal * 0.5 if valence < 0 else 0,
-            context={'emotion_label': emotion_label},
-        )
+        if intensity > 0.5:
+            return self._create_coalition(
+                content={
+                    'arousal': arousal,
+                    'valence': valence,
+                    'emotion': emotion.get('current', 'unknown'),
+                },
+                content_type=ContentType.EMOTION,
+                activation=intensity,
+                salience=arousal,
+                context={'intensity': intensity},
+            )
+        return None
 
 
 class GoalCodelet(Codelet):
-    """Aktif hedefleri coalition'a dönüştürür"""
+    """Aktif hedef codelet'i"""
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        super().__init__("goal_codelet", priority=0.6, logger=logger)
+    def __init__(self, logger=None):
+        super().__init__("goal_active", priority=0.7, logger=logger)
     
     def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
+        self.run_count += 1
         goals = context.get('active_goals', [])
-        current_goal = context.get('current_goal')
         
-        if not current_goal and not goals:
-            return None
-        
-        goal = current_goal or (goals[0] if goals else None)
-        if not goal:
-            return None
-        
-        importance = goal.get('importance', 0.5) if isinstance(goal, dict) else 0.5
-        
-        return self._create_coalition(
-            content=goal,
-            content_type=ContentType.GOAL,
-            activation=0.5 + importance * 0.3,
-            salience=importance,
-            context={'goal_type': 'current'},
-        )
+        if goals:
+            top_goal = goals[0] if isinstance(goals[0], dict) else {'name': goals[0]}
+            priority = top_goal.get('priority', 0.5)
+            
+            return self._create_coalition(
+                content={'goal': top_goal, 'goal_count': len(goals)},
+                content_type=ContentType.GOAL,
+                activation=priority,
+                salience=0.6,
+                context={'goals': goals},
+            )
+        return None
 
 
-class UrgencyCodelet(Codelet):
-    """Acil durumları tespit eder ve coalition oluşturur"""
+class MemoryCodelet(Codelet):
+    """İlgili hafıza codelet'i"""
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        super().__init__("urgency_codelet", priority=0.9, logger=logger)
+    def __init__(self, logger=None):
+        super().__init__("memory_relevant", priority=0.6, logger=logger)
     
     def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
-        # Çeşitli acil durum sinyalleri
-        danger = context.get('perception', {}).get('danger_level', 0)
-        health = context.get('agent_state', {}).get('health', 1.0)
+        self.run_count += 1
+        memories = context.get('relevant_memories', [])
         
-        # Acil durum: yüksek tehlike veya düşük sağlık
-        urgency_score = 0.0
-        urgency_reason = []
-        
-        if danger > 0.7:
-            urgency_score = max(urgency_score, danger)
-            urgency_reason.append(f"high_danger:{danger:.2f}")
-        
-        if health < 0.3:
-            urgency_score = max(urgency_score, 1 - health)
-            urgency_reason.append(f"low_health:{health:.2f}")
-        
-        if urgency_score < 0.5:
-            return None
-        
-        return self._create_coalition(
-            content={'urgency_reasons': urgency_reason, 'score': urgency_score},
-            content_type=ContentType.URGENCY,
-            activation=0.8 + urgency_score * 0.2,
-            salience=urgency_score,
-            urgency=urgency_score,
-            emotional_charge=-0.5,  # Acil durumlar negatif
-            context={'priority': 'critical'},
-        )
+        if memories:
+            top_memory = memories[0]
+            relevance = top_memory.get('relevance', 0.5)
+            
+            return self._create_coalition(
+                content={'memory': top_memory, 'memory_count': len(memories)},
+                content_type=ContentType.MEMORY,
+                activation=relevance,
+                salience=0.5,
+                context={'all_memories': memories},
+            )
+        return None
 
 
 class NoveltyCodelet(Codelet):
-    """Yeni/beklenmedik durumları tespit eder"""
+    """Yenilik/beklenmedik durum codelet'i"""
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        super().__init__("novelty_codelet", priority=0.5, logger=logger)
-        self.seen_patterns: Set[str] = set()
+    def __init__(self, logger=None):
+        super().__init__("novelty_detector", priority=0.75, logger=logger)
+        self.seen_patterns: set = set()
     
     def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
+        self.run_count += 1
         perception = context.get('perception', {})
+        symbols = tuple(sorted(perception.get('symbols', [])))
         
-        # Pattern hash oluştur
-        pattern_key = str(sorted(perception.get('symbols', [])))
+        if symbols and symbols not in self.seen_patterns:
+            self.seen_patterns.add(symbols)
+            novelty_score = min(1.0, len(symbols) * 0.2)
+            
+            return self._create_coalition(
+                content={'novel_symbols': list(symbols), 'novelty_score': novelty_score},
+                content_type=ContentType.NOVELTY,
+                activation=0.6 + novelty_score * 0.3,
+                salience=novelty_score,
+                context={'first_seen': True},
+            )
+        return None
+
+
+class UrgencyCodelet(Codelet):
+    """Düşük kaynak aciliyeti codelet'i"""
+    
+    def __init__(self, logger=None):
+        super().__init__("urgency_resources", priority=0.85, logger=logger)
+    
+    def run(self, context: Dict[str, Any]) -> Optional[Coalition]:
+        self.run_count += 1
+        agent = context.get('agent_state', {})
+        health = agent.get('health', 1.0)
+        energy = agent.get('energy', 1.0)
         
-        if pattern_key in self.seen_patterns:
-            return None  # Bilinen durum
+        urgency = 0.0
+        urgent_resource = None
         
-        # Yeni pattern
-        self.seen_patterns.add(pattern_key)
+        if health < 0.3:
+            urgency = 1.0 - health
+            urgent_resource = 'health'
+        elif energy < 0.2:
+            urgency = 0.8 - energy
+            urgent_resource = 'energy'
         
-        # Hafıza sınırlı tut
-        if len(self.seen_patterns) > 100:
-            self.seen_patterns = set(list(self.seen_patterns)[-50:])
-        
-        return self._create_coalition(
-            content={'novel_pattern': pattern_key, 'perception': perception},
-            content_type=ContentType.NOVELTY,
-            activation=0.6,
-            salience=0.5,
-            novelty=0.8,
-            context={'first_encounter': True},
-        )
+        if urgency > 0.5:
+            return self._create_coalition(
+                content={
+                    'urgency_type': 'low_resource',
+                    'resource': urgent_resource,
+                    'level': health if urgent_resource == 'health' else energy,
+                },
+                content_type=ContentType.URGENCY,
+                activation=urgency,
+                salience=urgency,
+                context={'health': health, 'energy': energy},
+            )
+        return None
 
 
 # =========================================================================
-# WORKSPACE SUBSCRIBER INTERFACE
+# WORKSPACE SUBSCRIBER
 # =========================================================================
 
 class WorkspaceSubscriber(ABC):
-    """Global Workspace broadcast'lerini dinleyen modül arayüzü"""
-    
-    @abstractmethod
-    async def receive_broadcast(self, message: BroadcastMessage) -> None:
-        """Broadcast mesajını işle"""
-        pass
+    """Broadcast alan modül interface'i"""
     
     @property
     @abstractmethod
     def subscriber_name(self) -> str:
-        """Subscriber adı"""
         pass
-
-
-# =========================================================================
-# GLOBAL WORKSPACE
-# =========================================================================
-
-class GlobalWorkspace:
-    """
-    LIDA tarzı Global Workspace implementasyonu.
     
-    Temel işlevler:
-    1. Coalition'ları topla (perception, memory, emotion, etc.)
-    2. Yarışma düzenle (activation tabanlı)
-    3. Kazananı broadcast et
-    4. Subscriber'ları bilgilendir
-    
-    Parametreler:
-    - competition_threshold: Minimum aktivasyon eşiği
-    - broadcast_decay: Her cycle'da broadcast içeriğinin zayıflaması
-    - max_coalitions: Aynı anda yarışabilecek maksimum coalition
-    """
-    
-    def __init__(
-        self,
-        competition_threshold: float = 0.4,
-        broadcast_decay: float = 0.1,
-        max_coalitions: int = 10,
-        logger: Optional[logging.Logger] = None,
-    ):
-        self.competition_threshold = competition_threshold
-        self.broadcast_decay = broadcast_decay
-        self.max_coalitions = max_coalitions
-        self.logger = logger or logging.getLogger("GlobalWorkspace")
-        
-        # State
-        self.state = WorkspaceState()
-        self.coalition_queue: List[Coalition] = []
-        self.subscribers: List[WorkspaceSubscriber] = []
-        self.codelets: List[Codelet] = []
-        
-        # History
-        self.broadcast_history: deque = deque(maxlen=50)
-        self.competition_history: deque = deque(maxlen=100)
-        
-        # Statistics
-        self.stats = {
-            'total_broadcasts': 0,
-            'total_competitions': 0,
-            'coalitions_by_type': {},
-            'winners_by_type': {},
-            'avg_winning_activation': 0.0,
-        }
-    
-    def register_subscriber(self, subscriber: WorkspaceSubscriber) -> None:
-        """Broadcast dinleyicisi ekle"""
-        self.subscribers.append(subscriber)
-        self.logger.info(f"Subscriber registered: {subscriber.subscriber_name}")
-    
-    def unregister_subscriber(self, subscriber: WorkspaceSubscriber) -> None:
-        """Broadcast dinleyicisini kaldır"""
-        if subscriber in self.subscribers:
-            self.subscribers.remove(subscriber)
-    
-    def register_codelet(self, codelet: Codelet) -> None:
-        """Codelet ekle"""
-        self.codelets.append(codelet)
-        self.logger.info(f"Codelet registered: {codelet.name}")
-    
-    def submit_coalition(self, coalition: Coalition) -> None:
-        """Coalition'ı yarışmaya ekle"""
-        if len(self.coalition_queue) >= self.max_coalitions:
-            # En düşük aktivasyonluyu çıkar
-            min_idx = min(range(len(self.coalition_queue)), 
-                         key=lambda i: self.coalition_queue[i].total_activation)
-            if coalition.total_activation > self.coalition_queue[min_idx].total_activation:
-                self.coalition_queue.pop(min_idx)
-                self.coalition_queue.append(coalition)
-        else:
-            self.coalition_queue.append(coalition)
-        
-        # İstatistik güncelle
-        ctype = coalition.content_type.value
-        self.stats['coalitions_by_type'][ctype] = self.stats['coalitions_by_type'].get(ctype, 0) + 1
-    
-    async def run_codelets(self, context: Dict[str, Any]) -> List[Coalition]:
-        """Tüm codelet'leri çalıştır ve coalition'ları topla"""
-        coalitions = []
-        
-        for codelet in self.codelets:
-            try:
-                result = codelet.run(context)
-                if result is not None:
-                    coalitions.append(result)
-                    self.submit_coalition(result)
-            except Exception as e:
-                self.logger.warning(f"Codelet {codelet.name} error: {e}")
-        
-        return coalitions
-    
-    def compete(self) -> Optional[Coalition]:
-        """
-        Coalition'lar arasında yarışma düzenle.
-        
-        En yüksek total_activation'a sahip coalition kazanır.
-        Eşik altındaki coalition'lar elemine edilir.
-        """
-        if not self.coalition_queue:
-            return None
-        
-        self.state.competition_in_progress = True
-        self.stats['total_competitions'] += 1
-        
-        # Eşik üstü coalition'ları filtrele
-        candidates = [c for c in self.coalition_queue 
-                     if c.total_activation >= self.competition_threshold]
-        
-        if not candidates:
-            self.state.competition_in_progress = False
-            self.coalition_queue.clear()
-            return None
-        
-        # En yüksek aktivasyonlu kazanır
-        winner = max(candidates, key=lambda c: c.total_activation)
-        
-        # Geçmişe ekle
-        self.competition_history.append({
-            'timestamp': time.time(),
-            'candidates_count': len(candidates),
-            'winner_type': winner.content_type.value,
-            'winner_activation': winner.total_activation,
-        })
-        
-        # İstatistik güncelle
-        wtype = winner.content_type.value
-        self.stats['winners_by_type'][wtype] = self.stats['winners_by_type'].get(wtype, 0) + 1
-        
-        # Running average of winning activation
-        n = self.stats['total_competitions']
-        old_avg = self.stats['avg_winning_activation']
-        self.stats['avg_winning_activation'] = old_avg + (winner.total_activation - old_avg) / n
-        
-        # Temizle
-        self.coalition_queue.clear()
-        self.state.competition_in_progress = False
-        self.state.current_content = winner
-        self.state.total_coalitions_evaluated += len(candidates)
-        
-        self.logger.debug(
-            f"Competition: {len(candidates)} candidates, winner={winner.content_type.value}, "
-            f"activation={winner.total_activation:.3f}"
-        )
-        
-        return winner
-    
-    async def broadcast(self, coalition: Coalition) -> BroadcastMessage:
-        """
-        Kazanan coalition'ı tüm subscriber'lara yayınla.
-        """
-        # Mesaj oluştur
-        message_id = hashlib.md5(
-            f"{coalition.coalition_id}:{time.time()}".encode()
-        ).hexdigest()[:12]
-        
-        # Öncelik belirle
-        if coalition.urgency > 0.7:
-            priority = BroadcastPriority.CRITICAL
-        elif coalition.urgency > 0.4 or coalition.salience > 0.7:
-            priority = BroadcastPriority.HIGH
-        elif coalition.salience < 0.3:
-            priority = BroadcastPriority.LOW
-        else:
-            priority = BroadcastPriority.NORMAL
-        
-        message = BroadcastMessage(
-            message_id=message_id,
-            content=coalition.content,
-            content_type=coalition.content_type,
-            source_coalition=coalition,
-            activation=coalition.total_activation,
-            priority=priority,
-            context=coalition.context,
-            recipients=[s.subscriber_name for s in self.subscribers],
-        )
-        
-        # Broadcast history
-        self.broadcast_history.append({
-            'message_id': message_id,
-            'content_type': coalition.content_type.value,
-            'activation': coalition.total_activation,
-            'timestamp': time.time(),
-            'recipients_count': len(self.subscribers),
-        })
-        
-        # State güncelle
-        self.state.last_broadcast_time = time.time()
-        self.state.broadcasts_count += 1
-        self.stats['total_broadcasts'] += 1
-        
-        # Tüm subscriber'lara gönder
-        tasks = []
-        for subscriber in self.subscribers:
-            tasks.append(subscriber.receive_broadcast(message))
-        
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        
-        self.logger.info(
-            f"Broadcast: type={coalition.content_type.value}, "
-            f"priority={priority.name}, recipients={len(self.subscribers)}"
-        )
-        
-        return message
-    
-    async def cycle(self, context: Dict[str, Any]) -> Optional[BroadcastMessage]:
-        """
-        Tam bir workspace cycle:
-        1. Codelet'leri çalıştır → coalition'lar
-        2. Yarışma düzenle
-        3. Kazananı broadcast et
-        
-        Returns:
-            BroadcastMessage if broadcast occurred, None otherwise
-        """
-        # 1. Codelet'leri çalıştır
-        await self.run_codelets(context)
-        
-        # 2. Yarışma
-        winner = self.compete()
-        
-        if winner is None:
-            return None
-        
-        # 3. Broadcast
-        message = await self.broadcast(winner)
-        
-        return message
-    
-    def get_current_content(self) -> Optional[Coalition]:
-        """Şu anki workspace içeriği"""
-        return self.state.current_content
-    
-    def get_attention_focus(self) -> Optional[str]:
-        """Dikkat odağı (en son broadcast edilen içerik türü)"""
-        if self.state.current_content:
-            return self.state.current_content.content_type.value
-        return None
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """İstatistikler"""
-        return {
-            **self.stats,
-            'current_queue_size': len(self.coalition_queue),
-            'subscribers_count': len(self.subscribers),
-            'codelets_count': len(self.codelets),
-            'state': {
-                'broadcasts_count': self.state.broadcasts_count,
-                'total_evaluated': self.state.total_coalitions_evaluated,
-                'attention_focus': self.get_attention_focus(),
-            },
-        }
+    @abstractmethod
+    async def receive_broadcast(self, message: BroadcastMessage) -> None:
+        pass
 
 
 # =========================================================================
@@ -685,50 +330,45 @@ class GlobalWorkspace:
 
 class AttentionController:
     """
-    Dikkat yönetimi.
-    
-    Top-down (goal-driven) ve bottom-up (stimulus-driven) 
-    dikkat arasında denge kurar.
+    Top-down attention modülasyonu.
+    Hedeflere göre coalition'ları boost eder.
     """
     
     def __init__(
         self,
-        top_down_weight: float = 0.4,
-        bottom_up_weight: float = 0.6,
+        top_down_weight: float = 0.3,
         logger: Optional[logging.Logger] = None,
     ):
+        self.logger = logger or logging.getLogger("Attention")
         self.top_down_weight = top_down_weight
-        self.bottom_up_weight = bottom_up_weight
-        self.logger = logger or logging.getLogger("AttentionController")
         
-        # Current attention state
-        self.current_focus: Optional[str] = None
-        self.focus_duration: float = 0.0
-        self.focus_start_time: float = 0.0
-        
-        # Attention history
-        self.attention_shifts: List[Dict[str, Any]] = []
-        
-        # Goals affecting attention
+        # Dikkat hedefleri
         self.attention_goals: List[Dict[str, Any]] = []
+        
+        # Dikkat durumu
+        self.current_focus: Optional[str] = None
+        self.focus_start_time: float = 0.0
+        self.focus_duration: float = 0.0
+        self.attention_shifts: List[Dict[str, Any]] = []
     
-    def set_attention_goal(self, goal_type: str, target: str, priority: float) -> None:
-        """Top-down dikkat hedefi belirle"""
+    def set_attention_goal(
+        self,
+        goal_type: str,
+        target: str,
+        priority: float,
+    ) -> None:
+        """Dikkat hedefi belirle"""
         self.attention_goals.append({
-            'goal_type': goal_type,
+            'type': goal_type,
             'target': target,
             'priority': priority,
             'set_at': time.time(),
         })
-        # En yüksek öncelikli hedefe göre sırala
-        self.attention_goals.sort(key=lambda x: -x['priority'])
+        self.attention_goals.sort(key=lambda x: x['priority'], reverse=True)
+        self.logger.debug(f"Attention goal set: {goal_type} → {target}")
     
     def modulate_coalition(self, coalition: Coalition) -> Coalition:
-        """
-        Top-down attention ile coalition aktivasyonunu modüle et.
-        
-        Hedefle uyumlu içerikler boost alır.
-        """
+        """Coalition aktivasyonunu hedeflere göre modüle et"""
         if not self.attention_goals:
             return coalition
         
@@ -740,19 +380,14 @@ class AttentionController:
             boost = top_goal['priority'] * self.top_down_weight * 0.3
         
         if boost > 0:
-            # Aktivasyonu boost et
-            new_activation = min(1.0, coalition.activation + boost)
-            coalition.activation = new_activation
-            self.logger.debug(
-                f"Attention boost: {coalition.content_type.value} +{boost:.3f}"
-            )
+            coalition.activation = min(1.0, coalition.activation + boost)
+            self.logger.debug(f"Attention boost: {coalition.content_type.value} +{boost:.3f}")
         
         return coalition
     
     def shift_attention(self, new_focus: str) -> None:
         """Dikkat kaydır"""
         if self.current_focus != new_focus:
-            # Eski odağı kaydet
             if self.current_focus:
                 self.attention_shifts.append({
                     'from': self.current_focus,
@@ -770,23 +405,207 @@ class AttentionController:
         if self.current_focus:
             self.focus_duration += dt
         
-        # Eski hedefleri temizle
+        # Eski hedefleri temizle (30 sn timeout)
         current_time = time.time()
         self.attention_goals = [
-            g for g in self.attention_goals 
-            if current_time - g['set_at'] < 30.0  # 30 saniye timeout
+            g for g in self.attention_goals
+            if current_time - g['set_at'] < 30.0
         ]
 
 
 # =========================================================================
-# WORKSPACE MANAGER (INTEGRATED)
+# GLOBAL WORKSPACE
+# =========================================================================
+
+class GlobalWorkspace:
+    """
+    LIDA tarzı Global Workspace.
+    
+    Cycle:
+    1. Codelet'ler coalition üretir
+    2. Coalition'lar yarışır
+    3. Kazanan broadcast edilir
+    """
+    
+    def __init__(
+        self,
+        competition_threshold: float = 0.4,
+        max_coalitions: int = 10,
+        decay_rate: float = 0.05,
+        logger: Optional[logging.Logger] = None,
+    ):
+        self.logger = logger or logging.getLogger("GlobalWorkspace")
+        
+        # Parametreler
+        self.competition_threshold = competition_threshold
+        self.max_coalitions = max_coalitions
+        self.decay_rate = decay_rate
+        
+        # Codelets
+        self.codelets: List[Codelet] = []
+        
+        # Coalition queue
+        self.coalition_queue: deque = deque(maxlen=max_coalitions)
+        
+        # Subscribers
+        self.subscribers: List[WorkspaceSubscriber] = []
+        
+        # Current conscious content
+        self.current_content: Optional[Coalition] = None
+        
+        # History
+        self.broadcast_history: deque = deque(maxlen=100)
+        self.cycle_count: int = 0
+    
+    def register_codelet(self, codelet: Codelet) -> None:
+        """Codelet kaydet"""
+        self.codelets.append(codelet)
+        self.codelets.sort(key=lambda c: c.priority, reverse=True)
+        self.logger.info(f"Codelet registered: {codelet.name}")
+    
+    def register_subscriber(self, subscriber: WorkspaceSubscriber) -> None:
+        """Subscriber kaydet"""
+        self.subscribers.append(subscriber)
+        self.logger.info(f"Subscriber registered: {subscriber.subscriber_name}")
+    
+    async def cycle(self, context: Dict[str, Any]) -> Optional[BroadcastMessage]:
+        """
+        Tek workspace cycle'ı çalıştır.
+        
+        1. Coalition üretimi (codelets)
+        2. Coalition yarışması
+        3. Broadcast
+        """
+        self.cycle_count += 1
+        
+        # 1. Codelet'leri çalıştır → coalition üret
+        new_coalitions = self._run_codelets(context)
+        
+        # Queue'ya ekle
+        for coalition in new_coalitions:
+            self.coalition_queue.append(coalition)
+        
+        # 2. Mevcut coalition'ları decay et
+        for coalition in self.coalition_queue:
+            coalition.decay(self.decay_rate)
+        
+        # 3. Yarışma
+        winner = self._compete()
+        
+        if winner is None:
+            return None
+        
+        # 4. Broadcast
+        message = await self._broadcast(winner)
+        
+        return message
+    
+    def _run_codelets(self, context: Dict[str, Any]) -> List[Coalition]:
+        """Tüm codelet'leri çalıştır"""
+        coalitions = []
+        
+        for codelet in self.codelets:
+            try:
+                coalition = codelet.run(context)
+                if coalition:
+                    coalitions.append(coalition)
+            except Exception as e:
+                self.logger.error(f"Codelet {codelet.name} error: {e}")
+        
+        return coalitions
+    
+    def _compete(self) -> Optional[Coalition]:
+        """Coalition'lar yarışır, en güçlü kazanır"""
+        if not self.coalition_queue:
+            return None
+        
+        # En yüksek competition_strength
+        candidates = list(self.coalition_queue)
+        candidates.sort(key=lambda c: c.competition_strength, reverse=True)
+        
+        winner = candidates[0]
+        
+        if winner.competition_strength < self.competition_threshold:
+            self.logger.debug(f"No winner (strength {winner.competition_strength:.3f} < threshold)")
+            return None
+        
+        self.current_content = winner
+        
+        # Kazananı queue'dan çıkar
+        self.coalition_queue.remove(winner)
+        
+        self.logger.debug(
+            f"Competition winner: {winner.content_type.value} "
+            f"(strength={winner.competition_strength:.3f})"
+        )
+        
+        return winner
+    
+    async def _broadcast(self, winner: Coalition) -> BroadcastMessage:
+        """Kazanan içeriği tüm subscriber'lara yayınla"""
+        
+        # Priority belirleme
+        priority = BroadcastPriority.NORMAL
+        if winner.content_type == ContentType.URGENCY:
+            priority = BroadcastPriority.CRITICAL
+        elif winner.content_type == ContentType.EMOTION:
+            priority = BroadcastPriority.HIGH
+        
+        message = BroadcastMessage(
+            coalition=winner,
+            content_type=winner.content_type,
+            content=winner.content,
+            timestamp=time.time(),
+            cycle_number=self.cycle_count,
+            priority=priority,
+        )
+        
+        # Tüm subscriber'lara gönder
+        broadcast_tasks = [
+            subscriber.receive_broadcast(message)
+            for subscriber in self.subscribers
+        ]
+        
+        if broadcast_tasks:
+            await asyncio.gather(*broadcast_tasks, return_exceptions=True)
+        
+        # History'ye ekle
+        self.broadcast_history.append(message)
+        
+        self.logger.info(
+            f"[BROADCAST] {winner.content_type.value} → "
+            f"{len(self.subscribers)} subscribers"
+        )
+        
+        return message
+    
+    def get_current_content(self) -> Optional[Coalition]:
+        """Şu anki conscious content"""
+        return self.current_content
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """İstatistikler"""
+        return {
+            'cycle_count': self.cycle_count,
+            'codelet_count': len(self.codelets),
+            'subscriber_count': len(self.subscribers),
+            'queue_size': len(self.coalition_queue),
+            'broadcast_count': len(self.broadcast_history),
+            'current_content_type': (
+                self.current_content.content_type.value
+                if self.current_content else None
+            ),
+        }
+
+
+# =========================================================================
+# WORKSPACE MANAGER (Unified Interface)
 # =========================================================================
 
 class WorkspaceManager:
     """
     Global Workspace + Attention Controller entegrasyonu.
-    
-    IntegratedUEMCore ile kullanım için hazır.
+    IntegratedUEMCore ile kullanım için.
     """
     
     def __init__(
@@ -815,11 +634,11 @@ class WorkspaceManager:
     def _register_default_codelets(self) -> None:
         """Varsayılan codelet'leri kaydet"""
         self.workspace.register_codelet(PerceptionCodelet(self.logger))
-        self.workspace.register_codelet(MemoryCodelet(self.logger))
         self.workspace.register_codelet(EmotionCodelet(self.logger))
         self.workspace.register_codelet(GoalCodelet(self.logger))
-        self.workspace.register_codelet(UrgencyCodelet(self.logger))
+        self.workspace.register_codelet(MemoryCodelet(self.logger))
         self.workspace.register_codelet(NoveltyCodelet(self.logger))
+        self.workspace.register_codelet(UrgencyCodelet(self.logger))
         
         self.logger.info("Default codelets registered (6)")
     
@@ -853,7 +672,6 @@ class WorkspaceManager:
         
         if message:
             self.broadcast_count += 1
-            # Dikkat kaydır
             self.attention.shift_attention(message.content_type.value)
         
         return message
@@ -884,14 +702,14 @@ class WorkspaceManager:
 
 
 # =========================================================================
-# FACTORY FUNCTION
+# FACTORY
 # =========================================================================
 
 def create_workspace_manager(
     config: Optional[Dict[str, Any]] = None,
     logger: Optional[logging.Logger] = None,
 ) -> WorkspaceManager:
-    """WorkspaceManager oluştur"""
+    """WorkspaceManager factory"""
     config = config or {}
     return WorkspaceManager(
         competition_threshold=config.get('competition_threshold', 0.4),

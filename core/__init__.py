@@ -1,1 +1,1 @@
-from .uem_core import UEMCore
+# UEM Core Package
