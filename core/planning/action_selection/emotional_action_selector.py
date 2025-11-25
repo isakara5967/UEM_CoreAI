@@ -24,18 +24,23 @@ class EmotionalState:
     @property
     def emotion_label(self) -> str:
         """PAD değerlerinden kategori çıkar"""
+        # Fear: negatif valence, yüksek arousal, düşük dominance
         if self.valence < -0.3 and self.arousal > 0.3:
-            if self.dominance < -0.2:
+            if self.dominance < 0:  # FIX: -0.2'den 0'a değişti
                 return "fear"
             else:
                 return "anger"
+        # Excitement: pozitif valence, yüksek arousal
         elif self.valence > 0.3 and self.arousal > 0.3:
             return "excitement"
+        # Contentment: pozitif valence, düşük arousal
         elif self.valence > 0.3 and self.arousal < -0.2:
             return "contentment"
+        # Sadness: negatif valence, düşük arousal
         elif self.valence < -0.3 and self.arousal < -0.2:
             return "sadness"
-        elif abs(self.arousal) < 0.2:
+        # Calm: düşük arousal (negatif arousal = sakin)
+        elif self.arousal < -0.2:  # FIX: abs() < 0.2 yerine < -0.2
             return "calm"
         return "neutral"
 
@@ -83,8 +88,7 @@ class EmotionalActionSelector:
         - exploration_willingness: yüksek
         
     SAKİN DURUM (calm):
-        - Tüm eşikler normal
-        - Dikkatli analiz
+        - Tüm eşikler biraz yüksek (dikkatli analiz)
         
     ÖFKE DURUMU (anger):
         - danger_threshold: 0.7 → 0.5
@@ -122,7 +126,6 @@ class EmotionalActionSelector:
         
         # Korku: Eşiği düşür (erken kaç)
         if emotion.emotion_label == "fear":
-            # Arousal yüksekse daha da erken kaç
             fear_modifier = -0.3 * (1 + emotion.arousal)
             return max(0.3, base + fear_modifier)
         
@@ -131,45 +134,46 @@ class EmotionalActionSelector:
             excitement_modifier = 0.15 * emotion.valence
             return min(0.9, base + excitement_modifier)
         
-        # Öfke: Orta düzeyde düşür (saldırgan ama dikkatli)
+        # Öfke: Orta düzeyde düşür
         elif emotion.emotion_label == "anger":
             anger_modifier = -0.15 * emotion.arousal
             return max(0.4, base + anger_modifier)
         
-        # Sakin: Hafif yükselt (daha dikkatli)
+        # Calm: Biraz yükselt (dikkatli analiz) - FIX ADDED
         elif emotion.emotion_label == "calm":
-            return base + 0.05
+            return base + 0.05  # 0.75 > 0.7
         
         return base
     
     def _compute_exploration_willingness(self) -> float:
-        """Keşif istekliliğini hesapla"""
+        """Duygusal duruma göre keşif isteği hesapla"""
+        base = 0.5
         emotion = self.current_emotion
         
-        # Pozitif valence + yüksek arousal = yüksek keşif
-        base_willingness = 0.5
-        
+        # Pozitif valence keşfi artırır
         valence_effect = emotion.valence * 0.3
-        arousal_effect = emotion.arousal * 0.2 if emotion.valence > 0 else -emotion.arousal * 0.2
         
-        willingness = base_willingness + valence_effect + arousal_effect
-        return max(0.1, min(1.0, willingness))
+        # Yüksek arousal keşfi artırır (heyecan) veya azaltır (korku)
+        if emotion.valence > 0:
+            arousal_effect = emotion.arousal * 0.2
+        else:
+            arousal_effect = -emotion.arousal * 0.2
+        
+        willingness = base + valence_effect + arousal_effect
+        return max(0.1, min(0.9, willingness))
     
     def _compute_escape_urgency(self) -> float:
-        """Kaçış aciliyetini hesapla (1.0 = çok acil)"""
+        """Kaçış aciliyetini hesapla"""
         emotion = self.current_emotion
         
         if emotion.emotion_label == "fear":
-            # Korku + yüksek arousal = panik kaçış
-            return 0.8 + (emotion.arousal * 0.2)
-        elif emotion.emotion_label == "anger":
-            # Öfke = kaçmak istemez, savaş
-            return 0.3
-        else:
-            return 0.5
+            # Yüksek arousal = yüksek aciliyet
+            return 0.5 + emotion.arousal * 0.4
+        
+        return 0.5
     
     def _should_be_aggressive(self) -> bool:
-        """Saldırgan davranış mı göstermeli?"""
+        """Saldırgan davranış gösterilmeli mi?"""
         emotion = self.current_emotion
         return (
             emotion.emotion_label == "anger" and 
@@ -204,7 +208,7 @@ class EmotionalActionSelector:
         # 1) TEHLİKE DEĞERLENDİRMESİ
         # ============================================
         if wm.danger_level >= danger_threshold:
-            # Öfke durumunda ve dominant ise: Savaş (CONFRONT)
+            # Öfke durumunda ve dominant ise: Savaş
             if self._should_be_aggressive():
                 action = ActionCommand(
                     name="CONFRONT_THREAT",
@@ -217,13 +221,9 @@ class EmotionalActionSelector:
                     confidence=0.6 + emotion.dominance * 0.3,
                     emotional_influence=0.7
                 )
-                self.logger.info(
-                    "[ActionSelector] CONFRONT selected (anger+dominance, danger=%.2f)",
-                    wm.danger_level
-                )
                 return action
             
-            # Korku durumu: Acil kaçış
+            # Normal kaçış
             escape_type = "PANIC_ESCAPE" if escape_urgency > 0.7 else "ESCAPE"
             action = ActionCommand(
                 name=escape_type,
@@ -237,17 +237,13 @@ class EmotionalActionSelector:
                 confidence=escape_urgency,
                 emotional_influence=abs(emotion.valence)
             )
-            self.logger.info(
-                "[ActionSelector] %s selected (danger=%.2f, threshold=%.2f, urgency=%.2f)",
-                escape_type, wm.danger_level, danger_threshold, escape_urgency
-            )
             return action
         
         # ============================================
         # 2) HEDEF DEĞERLENDİRMESİ
         # ============================================
         if wm.nearest_target is not None:
-            # Heyecanlı = daha agresif yaklaşım
+            # Heyecanlı = agresif yaklaşım
             if emotion.emotion_label == "excitement":
                 action = ActionCommand(
                     name="EAGER_APPROACH",
@@ -260,13 +256,9 @@ class EmotionalActionSelector:
                     confidence=0.8,
                     emotional_influence=emotion.valence
                 )
-                self.logger.info(
-                    "[ActionSelector] EAGER_APPROACH selected (excitement, target=%s)",
-                    getattr(wm.nearest_target, 'id', 'unknown')
-                )
                 return action
             
-            # Korku varsa ama tehlike eşiğinin altında: Temkinli yaklaşım
+            # Korku = temkinli yaklaşım
             if emotion.emotion_label == "fear":
                 action = ActionCommand(
                     name="CAUTIOUS_APPROACH",
@@ -278,10 +270,6 @@ class EmotionalActionSelector:
                     },
                     confidence=0.5,
                     emotional_influence=abs(emotion.valence)
-                )
-                self.logger.info(
-                    "[ActionSelector] CAUTIOUS_APPROACH selected (fear, target=%s)",
-                    getattr(wm.nearest_target, 'id', 'unknown')
                 )
                 return action
             
@@ -296,64 +284,49 @@ class EmotionalActionSelector:
                 confidence=0.7,
                 emotional_influence=0.2
             )
-            self.logger.debug("[ActionSelector] APPROACH_TARGET selected")
             return action
         
         # ============================================
         # 3) SOSYAL ETKİLEŞİM
         # ============================================
         if "AGENT_IN_SIGHT" in wm.symbols:
-            # Sosyal davranış emotion'a göre değişir
             if emotion.valence > 0.2:
                 action_name = "FRIENDLY_GREET"
             elif emotion.emotion_label == "fear":
                 action_name = "AVOID_AGENT"
-            elif emotion.emotion_label == "anger":
+            elif emotion.emotion_label == "anger" and emotion.dominance > 0:
                 action_name = "ASSERTIVE_STANCE"
             else:
-                action_name = "NEUTRAL_GREET"
+                action_name = "NEUTRAL_OBSERVE"
             
             action = ActionCommand(
                 name=action_name,
-                params={
-                    "note": "agent_in_sight",
-                    "emotion": emotion.emotion_label,
-                    "valence": emotion.valence,
-                },
+                params={"emotion": emotion.emotion_label},
                 confidence=0.6,
                 emotional_influence=abs(emotion.valence)
             )
-            self.logger.debug("[ActionSelector] %s selected (agent in sight)", action_name)
             return action
         
         # ============================================
         # 4) VARSAYILAN DAVRANIŞ
         # ============================================
-        # Keşif istekliliğine göre davranış
         if exploration_willingness > 0.6:
-            action_name = "ACTIVE_EXPLORE"
-        elif exploration_willingness < 0.3:
+            # Excitement = aktif keşif, normal = standart keşif
+            if emotion.emotion_label == "excitement":
+                action_name = "ACTIVE_EXPLORE"
+            else:
+                action_name = "EXPLORE"
+        elif emotion.emotion_label == "calm":
             action_name = "CAUTIOUS_OBSERVE"
         else:
-            action_name = "EXPLORE"
+            action_name = "IDLE"
         
-        action = ActionCommand(
+        return ActionCommand(
             name=action_name,
             params={
-                "reason": "default",
-                "symbols": list(wm.symbols),
-                "exploration_willingness": exploration_willingness,
                 "emotion": emotion.emotion_label,
+                "exploration_willingness": exploration_willingness,
             },
-            confidence=exploration_willingness,
-            emotional_influence=0.3
+            confidence=0.5,
+            emotional_influence=0.1
         )
-        self.logger.debug(
-            "[ActionSelector] %s selected (willingness=%.2f)",
-            action_name, exploration_willingness
-        )
-        return action
-
-
-# Geriye uyumluluk için alias
-ActionSelector = EmotionalActionSelector
