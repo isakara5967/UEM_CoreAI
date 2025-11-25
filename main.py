@@ -4,6 +4,8 @@ from typing import Any, Dict
 
 import yaml  # pyyaml gerektirir
 
+from world.test_dummy_world import TestDummyWorld
+
 from core.uem_core import UEMCore
 from core.logging_utils import setup_logging  # C.4'te yazacağız
 
@@ -43,8 +45,17 @@ def main() -> None:
     # 2) Çekirdek config'i yükle
     config = load_core_config("config/core.yaml")
 
-    # 3) UEMCore örneği oluştur
-    core = UEMCore(config=config, logger=logger)
+    # 3) Test amaçlı world interface oluştur
+    world = TestDummyWorld()
+
+    # 4) UEMCore örneğini world ile birlikte oluştur
+    core = UEMCore(
+        config=config,
+        world_interface=world,
+        logger=logger
+    )
+
+
 
     try:
         # 4) Alt sistemleri başlat
