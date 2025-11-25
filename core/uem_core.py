@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -14,7 +14,7 @@ from .event_bus import EventBus, Event, EventPriority
 
 
 class UEMCore:
-    '''UEM ana orkestratörü - Event-driven async version'''
+    '''UEM ana orkestratÃ¶rÃ¼ - Event-driven async version'''
 
     def __init__(
         self,
@@ -35,7 +35,7 @@ class UEMCore:
         self.event_bus = EventBus(event_bus_address)
         
         # Alt sistemler
-        self.memory = MemoryCore()
+        self.memory = MemoryCore(event_bus=self.event_bus)
         self.cognition = CognitionCore()
         
         self.perception = PerceptionCore(
@@ -43,6 +43,7 @@ class UEMCore:
             world_interface=self.world_interface,
             memory_core=self.memory,
             logger=self.logger.getChild('perception'),
+            event_bus=self.event_bus,
         )
         
         self.emotion = EmotionCore()
@@ -124,6 +125,7 @@ class UEMCore:
         
         # Perception events
         await self.event_bus.subscribe('perception.new_data', self._on_perception_data)
+        await self.event_bus.subscribe('perception.new_data', self.memory.on_perception_data)
         
         # Memory events  
         await self.event_bus.subscribe('memory.retrieved', self._on_memory_retrieved)
