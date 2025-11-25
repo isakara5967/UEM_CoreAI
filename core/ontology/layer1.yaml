@@ -1,0 +1,87 @@
+# UEM Ontology - Layer 1 (Core 12 concepts)
+
+ontology:
+  layer: 1
+  version: 1
+  description: "Core computable ontology layer for UEM (ENTITY/STATE/VALUE/RELATION)."
+
+  entities:
+    SELF:
+      description: "The UEM agent itself."
+      fields:
+        state_vector:
+          type: "StateVector[3]"   # [RESOURCE_LEVEL, THREAT_LEVEL, WELLBEING]
+        history:
+          type: "list[Event]"
+          description: "Chronological list of events involving SELF."
+        goals:
+          type: "list[Goal]"
+
+    OTHER:
+      description: "Non-self agents modeled by UEM."
+      fields:
+        observed_state:
+          type: "StateVector[3]"
+        predicted_state:
+          type: "StateVector[3]"
+
+    EVENT:
+      description: "Discrete occurrence that may change states."
+      fields:
+        source:
+          type: "EntityRef"        # 'SELF', 'OTHER:<id>', 'ENVIRONMENT'
+        target:
+          type: "EntityRef"
+        effect:
+          type: "StateDelta[3]"    # delta on [RESOURCE, THREAT, WELLBEING]
+        timestamp:
+          type: "float"            # seconds or unix time
+
+  states:
+    RESOURCE_LEVEL:
+      type: "float"
+      range: [0.0, 1.0]
+      description: "Normalized (health + energy)/2."
+      source: "WorldState.player_health, WorldState.player_energy"
+
+    THREAT_LEVEL:
+      type: "float"
+      range: [0.0, 1.0]
+      description: "Perceived danger level for SELF."
+      source: "WorldState.danger_level"
+
+    WELLBEING:
+      type: "float"
+      range: [0.0, 1.0]
+      description: "Affective quality derived from EmotionCore.valence."
+      source: "(EmotionCore.valence + 1) / 2"
+
+  values:
+    BENEFIT:
+      type: "float"
+      description: "Positive change in WELLBEING over Δt."
+      definition: "benefit = max(0, WELLBEING_t1 - WELLBEING_t0)"
+
+    COST:
+      type: "float"
+      description: "Negative change in RESOURCE_LEVEL over Δt."
+      definition: "cost = max(0, RESOURCE_LEVEL_t0 - RESOURCE_LEVEL_t1)"
+
+    VIOLATION:
+      type: "float"
+      range: [0.0, 1.0]
+      description: "Degree of ETHMOR constraint breach."
+      definition: "violation = ETHMOR.check_constraint_breach(event, context)"
+
+  relations:
+    CAUSES:
+      signature: "(event: EVENT) -> StateDelta"
+      description: "Maps an event to its induced change in state_vector."
+
+    AFFECTS:
+      signature: "(entity: ENTITY, event: EVENT) -> wellbeing_delta: float"
+      description: "Net effect of an event on entity's WELLBEING."
+
+    SIMILAR:
+      signature: "(state_a: StateVector, state_b: StateVector) -> similarity: float"
+      description: "Similarity between two state vectors (e.g., cosine)."

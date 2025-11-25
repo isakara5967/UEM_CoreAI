@@ -9,6 +9,22 @@ to the rest of the UEM core.
 
 from typing import Any, Dict, Optional
 
+# NEW: Ontology layer-1 types
+try:
+    from core.ontology.types import (
+        StateVector,
+        SelfEntity,
+        build_state_vector,
+    )
+except ImportError:
+    # Ontology henüz yoksa, tipler opsiyonel olsun ki sistem çökmesin.
+    StateVector = tuple  # type: ignore
+    SelfEntity = dict    # type: ignore
+
+    def build_state_vector(world_like: Any, emotion_like: Any) -> StateVector:  # type: ignore
+        # Geçici fallback: nötr state
+        return (0.5, 0.0, 0.5)
+
 
 class SelfCore:
     """Central SELF system orchestrator."""
@@ -42,6 +58,10 @@ class SelfCore:
         self.drive_system = None
         self.integrity_monitor = None
 
+        # NEW: Ontology katmanı için ek alanlar
+        self._state_vector: Optional[StateVector] = None
+        self._last_world_snapshot: Optional[Dict[str, Any]] = None
+
     def start(self) -> None:
         """Initialize SELF submodules."""
         from .identity.unit import IdentityUnit
@@ -74,7 +94,38 @@ class SelfCore:
         # İstersen logger üzerinden de ek log atmak için bırakıyorum:
         if self.logger is not None:
             self.logger.info("[UEM] Self system submodules initialized.")
-            
+
+    def _update_ontology_state_vector(
+        self, world_snapshot: Optional[Dict[str, Any]]
+    ) -> None:
+        """NEW: Katman 1 ontology state_vector'ü güncelle.
+
+        world_snapshot:
+            integrated core'dan gelen WorldState benzeri yapı (dict veya dataclass).
+        """
+        if self.emotion_system is None:
+            return
+
+        if world_snapshot is None:
+            return
+
+        # Hem dataclass (WorldState) hem de dict ile çalışabilecek küçük bir adapter
+        class _WorldAdapter:
+            def __init__(self, snap: Any) -> None:
+                if isinstance(snap, dict):
+                    self.__dict__.update(snap)
+                else:
+                    # dataclass / obje ise zaten attribute'ları var
+                    self.__dict__.update(snap.__dict__)
+
+        try:
+            world_like = _WorldAdapter(world_snapshot)
+            self._state_vector = build_state_vector(world_like, self.emotion_system)
+        except Exception as exc:  # pragma: no cover - savunma amaçlı
+            if self.logger is not None:
+                self.logger.warning(
+                    f"[SELF] Failed to update ontology state_vector: {exc}"
+                )
 
     def update(self, dt: float, world_snapshot: Optional[Dict[str, Any]] = None) -> None:
         """Update SELF submodules for the current step.
@@ -83,6 +134,11 @@ class SelfCore:
             dt: Simulation time-step.
             world_snapshot: Optional high-level snapshot from perception/world.
         """
+        # NEW: Son world snapshot'ı sakla ve ontolojik state_vector'ü güncelle
+        if world_snapshot is not None:
+            self._last_world_snapshot = world_snapshot
+            self._update_ontology_state_vector(world_snapshot)
+
         # Alt SELF ünitelerini sırayla güncelle
         for unit in (
             self.schema,
@@ -108,10 +164,6 @@ class SelfCore:
                 if self.logger is not None:
                     self.logger.warning("Failed to send SELF report to MetaMind.")
 
-
-
-    
-
     def get_self_state(self) -> Dict[str, Any]:
         """Return a unified SELF state representation."""
         state: Dict[str, Any] = {}
@@ -136,6 +188,10 @@ class SelfCore:
         ):
             state["integrity"] = self.integrity_monitor.export_state()
 
+        # NEW: Ontoloji state vektörünü de rapora ekle (geri uyumlu ek alan)
+        if self._state_vector is not None:
+            state["ontology_state_vector"] = self._state_vector
+
         return state
 
     def notify_event(self, event: Dict[str, Any]) -> None:
@@ -154,3 +210,30 @@ class SelfCore:
         ):
             if unit is not None and hasattr(unit, "notify_event"):
                 unit.notify_event(event)
+
+    # NEW: Ontoloji katmanı için ek API'ler ------------------------------
+
+    def get_state_vector(self) -> Optional[StateVector]:
+        """Return current ontology Layer-1 state vector if available."""
+        return self._state_vector
+
+    def build_self_entity(self) -> Optional[SelfEntity]:
+        """Create a Layer-1 SelfEntity snapshot for ontology-based modules.
+
+        Şimdilik:
+          - state_vector: _state_vector (yoksa nötr)
+          - history: boş (ileride Memory/Consolidation bağlanacak)
+          - goals: boş (ileride Planning bağlanacak)
+        """
+        if self._state_vector is None:
+            # Henüz bir şey hesaplayamadıysa nötr state kullan
+            state_vec: StateVector = (0.5, 0.0, 0.5)
+        else:
+            state_vec = self._state_vector
+
+        try:
+            entity = SelfEntity(state_vector=state_vec, history=[], goals=[])
+        except Exception:
+            # Ontology modülü henüz tam entegre değilse None döndür
+            return None
+        return entity
