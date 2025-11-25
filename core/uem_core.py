@@ -14,7 +14,7 @@ from .event_bus import EventBus, Event, EventPriority
 
 
 class UEMCore:
-    '''UEM ana orkestratÃ¶rÃ¼ - Event-driven async version'''
+    '''UEM ana orkestratÃƒÂ¶rÃƒÂ¼ - Event-driven async version'''
 
     def __init__(
         self,
@@ -46,12 +46,13 @@ class UEMCore:
             event_bus=self.event_bus,
         )
         
-        self.emotion = EmotionCore()
+        self.emotion = EmotionCore(event_bus=self.event_bus)
         self.planning = PlanningCore(
             config=self.config.get('planning', {}),
             memory_core=self.memory,
             world_interface=self.world_interface,
             logger=self.logger.getChild('planning'),
+            event_bus=self.event_bus,
         )
         
         self.metamind = MetaMindCore()
@@ -132,6 +133,7 @@ class UEMCore:
         
         # Planning events
         await self.event_bus.subscribe('planning.action_decided', self._on_action_decided)
+        await self.event_bus.subscribe('planning.action_decided', self.emotion.on_planning_action)
         
         # Emotion events
         await self.event_bus.subscribe('emotion.state_changed', self._on_emotion_changed)
