@@ -1,59 +1,108 @@
-from .short_term import ShortTermMemory
-from .working import WorkingMemory
-from .long_term import LongTermMemory
-from .episodic import EpisodicMemory
-from .semantic import SemanticMemory
-from .emotional import EmotionalMemory
+﻿from __future__ import annotations
+
+import logging
+from typing import Any, Optional
+
+from core.perception.types import PerceptionResult
+from core.memory.short_term.short_term_memory import ShortTermMemory
+from core.memory.working.working_memory import WorkingMemory, WorkingMemoryState
 
 
 class MemoryCore:
-    def __init__(self):
-        self.short_term = ShortTermMemory()
-        self.working = WorkingMemory()
-        self.long_term = LongTermMemory()
-        self.episodic = EpisodicMemory()
-        self.semantic = SemanticMemory()
-        self.emotional = EmotionalMemory()
+    """
+    UEM'in hafıza çekirdeği.
 
-        self.initialized = True
+    Şu anki kapsam:
+        - Kısa Süreli Hafıza (ShortTermMemory)
+        - Çalışan Hafıza (WorkingMemory)
 
-    def start(self):
-        self.short_term.start()
-        self.working.start()
-        self.long_term.start()
-        self.episodic.start()
-        self.semantic.start()
-        self.emotional.start()
+    Uzun vadede:
+        - LongTermMemory
+        - EpisodicMemory
+        - SemanticMemory
+        - EmotionalMemory
+    gibi alt sistemler buraya eklenecek.
+    """
 
-    # --- SELF Integration API ---
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
+        self.config = config or {}
+        base_logger = logger or logging.getLogger("core.memory")
+        self.logger = base_logger
 
-    def get_self_view(self) -> dict:
-        """SELF sistemi için episodik + duygusal hafıza özetini döndürür."""
-        episodes = []
-        emotional_profile = {}
+        self.short_term: Optional[ShortTermMemory] = None
+        self.working: Optional[WorkingMemory] = None
 
-        if hasattr(self.episodic, "get_self_relevant_episodes"):
-            episodes = self.episodic.get_self_relevant_episodes()
+    # ------------------------------------------------------------------ #
+    # Lifecycle
+    # ------------------------------------------------------------------ #
 
-        if hasattr(self.emotional, "get_recent_emotional_profile_for_self"):
-            emotional_profile = self.emotional.get_recent_emotional_profile_for_self()
-
-        return {
-            "episodes": episodes,
-            "emotional_profile": emotional_profile,
-        }
-
-    # --- Event pipeline integration ---
-
-    def notify_event(self, event: dict) -> None:
+    def start(self) -> None:
         """
-        UEMCore'dan gelen olayı hafızaya iletir.
-        Şimdilik tüm olayları SELF-relevant sayıp episodik hafızaya yazıyoruz.
+        Alt hafıza sistemlerini başlatır.
+        UEMCore.start() içinde çağrılması beklenir.
         """
-        if not isinstance(event, dict):
+        stm_capacity = int(self.config.get("short_term_capacity", 10))
+
+        self.short_term = ShortTermMemory(
+            capacity=stm_capacity,
+            logger=self.logger.getChild("ShortTermMemory"),
+        )
+        self.working = WorkingMemory(
+            logger=self.logger.getChild("WorkingMemory"),
+        )
+
+        self.logger.info(
+            "[Memory] MemoryCore initialized (short_term_capacity=%d).",
+            stm_capacity,
+        )
+
+    def update(self, dt: float) -> None:
+        """
+        Şu anda STM/WM için per-tick aktif bir iş yapmıyor.
+        Gerektiğinde unutma, decay vb. mekanizmalar buraya eklenecek.
+        """
+        # Gelecekte unutma / consolidasyon vs. için kullanılacak.
+        return
+
+    # ------------------------------------------------------------------ #
+    # Integration points
+    # ------------------------------------------------------------------ #
+
+    def store_perception(self, perception: PerceptionResult) -> None:
+        """
+        PerceptionCore tarafından çağrılır.
+        Gelen perception'ı kısa süreli hafızaya yazar ve
+        çalışan hafızayı günceller.
+        """
+        if self.short_term is None or self.working is None:
+            # start() henüz çağrılmadıysa sessizce çık.
+            self.logger.warning(
+                "[Memory] store_perception called before start(); ignoring."
+            )
             return
 
-        if hasattr(self.episodic, "tag_self_relevant_event"):
-            self.episodic.tag_self_relevant_event(event)
+        self.short_term.store_perception(perception)
+        self.working.update_from_perception(perception)
 
-        # İleride burada duygusal / semantik hafıza güncellemeleri de yapılabilir.
+    # ------------------------------------------------------------------ #
+    # Query helpers
+    # ------------------------------------------------------------------ #
+
+    def get_last_perception(self) -> Optional[PerceptionResult]:
+        if self.short_term is None:
+            return None
+        return self.short_term.get_last()
+
+    def get_recent_perceptions(self):
+        if self.short_term is None:
+            return []
+        return self.short_term.get_all()
+
+    def get_working_state(self) -> Optional[WorkingMemoryState]:
+        if self.working is None:
+            return None
+        return self.working.get_state()
