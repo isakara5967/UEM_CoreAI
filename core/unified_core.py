@@ -322,6 +322,7 @@ class UnifiedUEMCore:
                 outcome_type="error_fallback",
                 outcome_valence=-0.1,
                 actual_effect=(0.0, 0.0, 0.0),
+                reasoning=["error_fallback"],
             )
         
         # Metrics
@@ -633,6 +634,7 @@ class UnifiedUEMCore:
             outcome_type=outcome_type,
             outcome_valence=outcome_valence,
             actual_effect=action.predicted_effect,
+            reasoning=action.reasoning,
         )
     
     async def _phase_learning(

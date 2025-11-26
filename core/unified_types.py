@@ -76,6 +76,7 @@ class ActionResult:
     outcome_type: str = "neutral"
     outcome_valence: float = 0.0
     actual_effect: StateDelta = (0.0, 0.0, 0.0)
+    reasoning: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -85,6 +86,7 @@ class ActionResult:
             'outcome_type': self.outcome_type,
             'outcome_valence': self.outcome_valence,
             'actual_effect': self.actual_effect,
+            'reasoning': self.reasoning,
         }
 
 

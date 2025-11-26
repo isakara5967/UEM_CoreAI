@@ -2,6 +2,8 @@
 from typing import Any, Optional
 
 from core.perception.types import (
+    PerceivedObject,
+    PerceivedAgent,
     EnvironmentState,
     PerceptionResult,
     WorldSnapshot,
@@ -194,3 +196,104 @@ class PerceptionCore:
             '[Perception] Unsupported snapshot type from world: %r', type(raw)
         )
         return None
+
+    def process(self, world_state: Any) -> 'PerceptionResult':
+        '''
+        UnifiedUEMCore uyumlu API.
+        
+        WorldState alır, PerceptionResult döndürür.
+        Bu metod update() yerine doğrudan çağrılabilir.
+        
+        Args:
+            world_state: WorldState veya dict benzeri obje
+            
+        Returns:
+            PerceptionResult veya world_state (fallback)
+        '''
+        # Ensure pipeline is initialized
+        if self.noise_filter is None:
+            self.start()
+        
+        # Extract data from world_state
+        tick = getattr(world_state, 'tick', 0)
+        danger_level = getattr(world_state, 'danger_level', 0.0)
+        objects = getattr(world_state, 'objects', [])
+        agents = getattr(world_state, 'agents', [])
+        symbols = getattr(world_state, 'symbols', [])
+        player_health = getattr(world_state, 'player_health', 1.0)
+        player_energy = getattr(world_state, 'player_energy', 1.0)
+        
+        # Build minimal WorldSnapshot
+        snapshot = WorldSnapshot(
+            tick=tick,
+            timestamp=float(tick),
+            agent_position=(0.0, 0.0, 0.0),
+            objects=objects,
+            agents=agents,
+            environment={
+                'danger_level': danger_level,
+                'player_health': player_health,
+                'player_energy': player_energy,
+            },
+        )
+        
+        # Process through pipeline (simplified)
+        processed_objects = []
+        for obj in objects:
+            obj_id = obj.get('id', f'obj_{len(processed_objects)}')
+            obj_type = obj.get('type', 'unknown')
+            processed_objects.append(PerceivedObject(
+                id=obj_id,
+                obj_type=obj_type,
+                position=(0.0, 0.0, 0.0),
+                distance=1.0,
+                is_dangerous=obj_type in ('enemy', 'trap', 'hazard'),
+                is_interactable=obj_type in ('food', 'water', 'item', 'treasure'),
+                raw=obj,
+            ))
+        
+        processed_agents = []
+        for agent in agents:
+            agent_id = agent.get('id', f'agent_{len(processed_agents)}')
+            agent_type = agent.get('type', 'unknown')
+            relation = 'hostile' if agent_type == 'enemy' else 'neutral'
+            processed_agents.append(PerceivedAgent(
+                id=agent_id,
+                agent_type=agent_type,
+                position=(0.0, 0.0, 0.0),
+                relation=relation,
+                raw=agent,
+            ))
+        
+        # Find nearest danger
+        nearest_danger = None
+        for obj in processed_objects:
+            if obj.is_dangerous:
+                nearest_danger = obj
+                break
+        
+        # Build environment state
+        env_state = EnvironmentState(
+            danger_level=danger_level,
+            nearest_danger=nearest_danger,
+            nearest_target=None,
+            notes=f"tick={tick}, symbols={symbols}",
+        )
+        
+        # Build result
+        result = PerceptionResult(
+            snapshot=snapshot,
+            objects=processed_objects,
+            agents=processed_agents,
+            environment_state=env_state,
+            symbols=list(symbols),
+        )
+        
+        self.last_result = result
+        
+        self.logger.debug(
+            '[Perception] process(): tick=%d, objects=%d, agents=%d, danger=%.2f',
+            tick, len(processed_objects), len(processed_agents), danger_level,
+        )
+        
+        return result
