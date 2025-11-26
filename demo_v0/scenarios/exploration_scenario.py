@@ -24,11 +24,11 @@ SCENARIO_CONFIG = {
     # =========================================================================
     "planning_weights": {
         "safety": 0.3,       # Lower - environment is safer
-        "curiosity": 0.5,    # High - exploration focus
+        "curiosity": 0.6,    # High - exploration focus
         "empathy": 0.2,      # Moderate
     },
     
-    "softmax_temperature": 0.7,  # High T = more stochastic (exploration needs variety)
+    "softmax_temperature": 0.9,  # High T = more stochastic (exploration needs variety)
     
     # =========================================================================
     

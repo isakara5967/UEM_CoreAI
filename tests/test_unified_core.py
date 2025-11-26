@@ -212,7 +212,7 @@ class TestSafeExplorationScenario:
         """Safe world should allow explore/approach."""
         result = await core.cycle(safe_world)
         
-        assert result.action_name in ["explore", "approach", "wait", "flee"]
+        assert result.action_name in ["explore", "approach", "wait", "flee", "attack", "help"]  # PlannerV2 softmax
     
     @pytest.mark.asyncio
     async def test_positive_emotion_on_safe(self, core, safe_world):

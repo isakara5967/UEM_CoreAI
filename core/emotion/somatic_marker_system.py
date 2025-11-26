@@ -123,6 +123,10 @@ class SomaticMarkerSystem:
         self.total_activations = 0
         self.bias_applications = 0
         
+        # Action experience count (for confidence calculation)
+        self.action_experience_count: Dict[str, int] = defaultdict(int)
+        self.confidence_threshold = 30  # Full confidence after 30 experiences
+        
         # Load persisted markers if available
         if self.persistence_path and self.persistence_path.exists():
             self._load_markers()
@@ -285,6 +289,7 @@ class SomaticMarkerSystem:
             )
             situation_markers[pending.action_name] = marker
             self.total_markers += 1
+            self.action_experience_count[pending.action_name] += 1
             
             self.logger.info(
                 "[Somatic] Created marker: %s→%s, valence=%.2f (%s)",
@@ -562,6 +567,11 @@ class SomaticMarkerSystem:
     # STATISTICS & DEBUG
     # =========================================================================
     
+    def get_confidence(self, action: str) -> float:
+        """Get learned confidence for an action (0-1)"""
+        count = self.action_experience_count.get(action, 0)
+        return min(1.0, count / self.confidence_threshold)
+
     def get_stats(self) -> Dict[str, Any]:
         """İstatistikleri döndür"""
         return {
