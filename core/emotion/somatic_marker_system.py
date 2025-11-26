@@ -246,6 +246,9 @@ class SomaticMarkerSystem:
         """
         if not self.pending_actions:
             self.logger.debug("[Somatic] No pending actions for outcome")
+            # Still update action experience count
+            if action_name:
+                self.action_experience_count[action_name] += 1
             return None
         
         # Find matching pending action

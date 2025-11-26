@@ -669,6 +669,7 @@ class UnifiedUEMCore:
         if self.somatic_system is not None:
             try:
                 self.somatic_system.record_outcome(
+                    action_name=action_result.action_name,
                     outcome_valence=action_result.outcome_valence,
                     outcome_description=action_result.outcome_type,
                 )

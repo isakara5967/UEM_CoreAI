@@ -313,7 +313,8 @@ class PlannerV2:
             
             if bias_info:
                 raw_bias = bias_info.bias_value
-                confidence = bias_info.confidence
+                # Use action experience confidence (learned)
+                confidence = context.somatic_markers.get_confidence(candidate.action) if hasattr(context.somatic_markers, "get_confidence") else bias_info.confidence
                 
                 # Scale somatic by learned confidence
                 # Formula: raw * (0.4 + 0.6 * confidence)
