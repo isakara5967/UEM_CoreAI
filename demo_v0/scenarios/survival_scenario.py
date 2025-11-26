@@ -3,18 +3,34 @@
 Survival Scenario - Danger-heavy scenario for Demo v0.
 
 Focus: High threat environment, flee/attack decisions, somatic learning.
+
+UPDATED: Planning rebalance - added planning_weights and softmax_temperature
 """
 
 SCENARIO_CONFIG = {
     "name": "survival",
     "description": "Tehlike ağırlıklı hayatta kalma senaryosu",
     
+    # Event generation weights
     "event_weights": {
         "danger": 0.50,
         "resource": 0.20,
         "social": 0.10,
         "environmental": 0.20,
     },
+    
+    # =========================================================================
+    # NEW: Planning Rebalance Parameters
+    # =========================================================================
+    "planning_weights": {
+        "safety": 0.6,       # High - survival focus
+        "curiosity": 0.2,    # Low - not the priority
+        "empathy": 0.2,      # Low - self-preservation first
+    },
+    
+    "softmax_temperature": 0.3,  # Low T = more deterministic (survival needs focus)
+    
+    # =========================================================================
     
     "initial_world": {
         "danger_level": 0.3,

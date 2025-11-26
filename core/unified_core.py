@@ -33,7 +33,7 @@ from core.unified_types import (
 )
 
 # Core modules
-from core.planning.planner import Planner
+from core.planning.planner_v2 import PlannerV2
 from core.planning.types import PlanningContext, ActionPlan
 
 # Conditional imports with fallbacks
@@ -232,7 +232,7 @@ class UnifiedUEMCore:
             self.logger.warning("[UnifiedCore] EthmorSystem not available")
     
     def _init_planner(self) -> None:
-        self.planner = Planner(
+        self.planner = PlannerV2(
             ethmor_system=self.ethmor,
             logger=self.logger.getChild("Planner"),
         )

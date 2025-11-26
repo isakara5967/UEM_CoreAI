@@ -3,18 +3,34 @@
 Exploration Scenario - Resource/discovery-heavy scenario for Demo v0.
 
 Focus: Curiosity, resource gathering, low threat environment.
+
+UPDATED: Planning rebalance - added planning_weights and softmax_temperature
 """
 
 SCENARIO_CONFIG = {
     "name": "exploration",
     "description": "Keşif ve kaynak toplama ağırlıklı senaryo",
     
+    # Event generation weights
     "event_weights": {
         "danger": 0.15,
         "resource": 0.50,
         "social": 0.15,
         "environmental": 0.20,
     },
+    
+    # =========================================================================
+    # NEW: Planning Rebalance Parameters
+    # =========================================================================
+    "planning_weights": {
+        "safety": 0.3,       # Lower - environment is safer
+        "curiosity": 0.5,    # High - exploration focus
+        "empathy": 0.2,      # Moderate
+    },
+    
+    "softmax_temperature": 0.7,  # High T = more stochastic (exploration needs variety)
+    
+    # =========================================================================
     
     "initial_world": {
         "danger_level": 0.1,
@@ -24,8 +40,7 @@ SCENARIO_CONFIG = {
     
     "tick_count": 20,
     
-    # Uses same event definitions as survival
-    # but with different weights (resource-heavy)
+    # Scenario-specific events
     "events": {
         "FOUND_TREASURE": {
             "category": "resource",

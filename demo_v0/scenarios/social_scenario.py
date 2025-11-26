@@ -3,18 +3,34 @@
 Social Scenario - Empathy/interaction-heavy scenario for Demo v0.
 
 Focus: NPC interactions, help decisions, empathy system testing.
+
+UPDATED: Planning rebalance - added planning_weights and softmax_temperature
 """
 
 SCENARIO_CONFIG = {
     "name": "social",
     "description": "Empati ve sosyal etkileşim ağırlıklı senaryo",
     
+    # Event generation weights
     "event_weights": {
         "danger": 0.10,
         "resource": 0.20,
         "social": 0.55,
         "environmental": 0.15,
     },
+    
+    # =========================================================================
+    # NEW: Planning Rebalance Parameters
+    # =========================================================================
+    "planning_weights": {
+        "safety": 0.25,      # Lower - focus is social
+        "curiosity": 0.25,   # Moderate
+        "empathy": 0.5,      # High - social focus
+    },
+    
+    "softmax_temperature": 0.5,  # Medium T = balanced (social needs some predictability)
+    
+    # =========================================================================
     
     "initial_world": {
         "danger_level": 0.15,

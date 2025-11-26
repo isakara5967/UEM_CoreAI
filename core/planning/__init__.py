@@ -25,3 +25,7 @@ __all__ = [
     # Legacy
     'PlanningCore',
 ]
+
+# v2 API (Rebalanced)
+from .planner_v2 import PlannerV2, create_planner_v2, RunContext
+
