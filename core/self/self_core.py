@@ -505,23 +505,38 @@ class SelfCore:
     # =========================================================================
 
     def get_ethmor_context(self) -> Dict[str, Any]:
-        """Build context dict for ETHMOR evaluation."""
-        return {
-            'state_vector': self._state_vector,
-            'previous_state': self._previous_state_vector,
-            'state_delta': self._state_delta,
+        """Build context dict for ETHMOR system."""
+        current = self._state_vector or (0.5, 0.0, 0.5)
+        previous = self._previous_state_vector
+        delta = self._state_delta
+        
+        context = {
+            'self_entity': self.build_self_entity(),
+            'state_vector': current,
+            'RESOURCE_LEVEL': current[0],
+            'THREAT_LEVEL': current[1],
+            'WELLBEING': current[2],
             'goals': [{'name': g.name, 'priority': g.priority} for g in self._goals],
             'primary_goal': self._goals[0].name if self._goals else None,
             'tick': self._tick_count,
             'recent_events': [
-                {
-                    'source': e.source,
-                    'target': e.target,
-                    'effect': e.effect,
-                }
+                {'source': e.source, 'target': e.target, 'effect': e.effect}
                 for e in self.get_recent_events(5)
             ],
+            'previous_state': previous,
         }
+        
+        if previous is not None:
+            context['RESOURCE_LEVEL_before'] = previous[0]
+            context['THREAT_LEVEL_before'] = previous[1]
+            context['WELLBEING_before'] = previous[2]
+        
+        if delta is not None:
+            context['RESOURCE_LEVEL_delta'] = delta[0]
+            context['THREAT_LEVEL_delta'] = delta[1]
+            context['WELLBEING_delta'] = delta[2]
+        
+        return context
 
     # =========================================================================
     # STATE PREDICTION
@@ -529,17 +544,34 @@ class SelfCore:
 
     def predict_state_after_action(
         self,
-        action_effect: Tuple[float, float, float],
+        action_name: str = "",
+        predicted_effects: Optional[Dict[str, float]] = None,
+        action_effect: Optional[Tuple[float, float, float]] = None,
     ) -> StateVector:
         """Predict state vector after applying an action effect."""
         current = self._state_vector or (0.5, 0.0, 0.5)
         
-        predicted = tuple(
-            max(0.0, min(1.0, c + e))
-            for c, e in zip(current, action_effect)
-        )
+        if action_effect is not None:
+            predicted = tuple(
+                max(0.0, min(1.0, c + e))
+                for c, e in zip(current, action_effect)
+            )
+            return predicted
         
-        return predicted  # type: ignore
+        if predicted_effects is not None:
+            health_delta = predicted_effects.get('health_delta', 0.0)
+            energy_delta = predicted_effects.get('energy_delta', 0.0)
+            danger_delta = predicted_effects.get('danger_delta', 0.0)
+            resource_delta = (health_delta + energy_delta) / 2.0
+            
+            predicted = (
+                max(0.0, min(1.0, current[0] + resource_delta)),
+                max(0.0, min(1.0, current[1] + danger_delta)),
+                max(0.0, min(1.0, current[2])),
+            )
+            return predicted
+        
+        return current
 
     # =========================================================================
     # STATE EXPORT
