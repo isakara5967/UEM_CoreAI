@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  uem-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: uem-postgres
+    environment:
+      POSTGRES_DB: uem_memory
+      POSTGRES_USER: uem
+      POSTGRES_PASSWORD: uem_secret_123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
