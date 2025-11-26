@@ -454,27 +454,50 @@ class UnifiedUEMCore:
         self_state: SelfState,
         world_state: WorldState,
     ) -> AppraisalResult:
-        """Phase 4: Emotional appraisal."""
+        """Phase 4: Emotional appraisal via EmotionCore."""
         self.logger.debug(f"[Cycle {self.tick}] Phase: appraisal")
         
-        # Get danger level
+        # Use EmotionCore.evaluate() if available
+        if self.emotion_core is not None:
+            try:
+                result = self.emotion_core.evaluate(
+                    world_snapshot=world_state,
+                    state_vector=self_state.state_vector,
+                )
+                
+                valence = result.get('valence', 0.0)
+                arousal = result.get('arousal', 0.5)
+                dominance = result.get('dominance', 0.0)
+                emotion_label = result.get('emotion_label', 'neutral')
+                
+                self.current_emotion = {
+                    "valence": valence,
+                    "arousal": arousal,
+                    "dominance": dominance,
+                }
+                
+                return AppraisalResult(
+                    valence=valence,
+                    arousal=arousal,
+                    dominance=dominance,
+                    emotion_label=emotion_label,
+                )
+            except Exception as e:
+                self.logger.warning(f"[Appraisal] EmotionCore.evaluate failed: {e}")
+        
+        # Fallback: inline appraisal (if EmotionCore unavailable)
         danger = getattr(world_state, 'danger_level', 0.0)
         health = getattr(world_state, 'player_health', 1.0)
         
-        # Compute appraisal
-        # Valence: danger → negative, health → positive
         valence = -danger * 0.5 + (health - 0.5) * 0.3
         valence = max(-1.0, min(1.0, valence))
         
-        # Arousal: danger increases arousal
         arousal = 0.5 + danger * 0.4
         arousal = max(0.0, min(1.0, arousal))
         
-        # Dominance: based on health and threat
         dominance = (health - danger) * 0.3
         dominance = max(-1.0, min(1.0, dominance))
         
-        # Classify emotion
         if valence < -0.3 and arousal > 0.6:
             emotion_label = "fear"
         elif valence < -0.3 and arousal < 0.4:
@@ -486,18 +509,11 @@ class UnifiedUEMCore:
         else:
             emotion_label = "neutral"
         
-        # Update current emotion state
         self.current_emotion = {
             "valence": valence,
             "arousal": arousal,
             "dominance": dominance,
         }
-        
-        # Sync with EmotionCore if available
-        if self.emotion_core is not None:
-            self.emotion_core.valence = valence
-            self.emotion_core.arousal = arousal
-            self.emotion_core.dominance = dominance
         
         return AppraisalResult(
             valence=valence,
@@ -505,7 +521,8 @@ class UnifiedUEMCore:
             dominance=dominance,
             emotion_label=emotion_label,
         )
-    
+
+
     def _phase_empathy(
         self,
         perception_result: Any,

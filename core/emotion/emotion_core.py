@@ -160,3 +160,55 @@ class EmotionCore:
             'dominance': self.dominance,
             'emotion': self._classify_emotion(),
         }
+
+    # =========================================================================
+    # EVALUATE API (v1)
+    # =========================================================================
+
+    def evaluate(self, world_snapshot, state_vector) -> dict:
+        """
+        Appraisal hesaplamasını yapan resmi API (v1).
+        
+        Args:
+            world_snapshot: WorldSnapshot veya dict (danger_level içermeli)
+            state_vector: (resource, threat, wellbeing) tuple
+            
+        Returns:
+            AppraisalResult benzeri dict
+        """
+        # Extract danger level
+        danger = 0.0
+        if hasattr(world_snapshot, 'environment_state'):
+            danger = getattr(world_snapshot.environment_state, 'danger_level', 0.0)
+        elif hasattr(world_snapshot, 'danger_level'):
+            danger = world_snapshot.danger_level
+        elif isinstance(world_snapshot, dict):
+            danger = world_snapshot.get('danger_level', 0.0)
+        
+        # Extract health/resource from state_vector
+        health = state_vector[0] if state_vector else 0.5
+        
+        # Compute PAD values
+        valence = -danger * 0.5 + (health - 0.5) * 0.3
+        valence = max(-1.0, min(1.0, valence))
+        
+        arousal = 0.5 + danger * 0.4
+        arousal = max(0.0, min(1.0, arousal))
+        
+        dominance = (health - danger) * 0.3
+        dominance = max(-1.0, min(1.0, dominance))
+        
+        # Update internal state
+        self.valence = valence
+        self.arousal = arousal
+        self.dominance = dominance
+        
+        # Classify emotion
+        emotion_label = self._classify_emotion()
+        
+        return {
+            'valence': valence,
+            'arousal': arousal,
+            'dominance': dominance,
+            'emotion_label': emotion_label,
+        }
