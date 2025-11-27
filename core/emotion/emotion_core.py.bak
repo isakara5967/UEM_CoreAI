@@ -135,31 +135,19 @@ class EmotionCore:
             await self.event_bus.publish(emotion_event)
 
     def _classify_emotion(self) -> str:
-        """Simple PAD-based emotion classification (v1.5 - 0-1 arousal)"""
-        # Arousal: 0-1 scale (0=calm, 1=excited)
-        # Valence: -1 to 1 scale (-1=negative, 1=positive)
-        
-        high_arousal = self.arousal >= 0.45
-        low_arousal = self.arousal < 0.35
-        
-        if self.valence > 0.3 and high_arousal:
+        '''Simple PAD-based emotion classification'''
+        if self.valence > 0.3 and self.arousal > 0.3:
             return 'joy'
-        elif self.valence > 0.3 and low_arousal:
-            return 'calm'
-        elif self.valence > 0.25:
-            return 'content'
-        elif self.valence < -0.3 and high_arousal:
+        elif self.valence < -0.3 and self.arousal > 0.3:
             if self.dominance < -0.2:
                 return 'fear'
             else:
                 return 'anger'
-        elif self.valence < -0.3 and low_arousal:
+        elif self.valence < -0.3 and self.arousal < -0.2:
             return 'sadness'
-        elif self.valence < -0.25:
-            return 'worried'
-        elif abs(self.valence) < 0.2 and self.arousal < 0.4:
+        elif abs(self.valence) < 0.2 and abs(self.arousal) < 0.2:
             return 'neutral'
-        elif high_arousal:
+        elif self.arousal > 0.3:
             return 'excited'
         else:
             return 'calm'

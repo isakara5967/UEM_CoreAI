@@ -209,12 +209,14 @@ class DemoRunner:
             emotion = core.get_emotion() or emotion
         elif hasattr(core, 'current_emotion'):
             emotion = core.current_emotion or emotion
+            if 'emotion_label' not in emotion and hasattr(core, 'emotion_core'):
+                emotion['emotion_label'] = core.emotion_core._classify_emotion()
         elif hasattr(core, 'emotion_core'):
             ec = core.emotion_core
             emotion = {
                 "valence": getattr(ec, 'valence', 0.0),
                 "arousal": getattr(ec, 'arousal', 0.5),
-                "emotion_label": getattr(ec, 'current_emotion', 'neutral'),
+                "emotion_label": ec._classify_emotion(),
             }
         
         # 10. Update statistics
