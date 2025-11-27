@@ -216,7 +216,12 @@ class DemoRunner:
                 emotion["label"] = "neutral"
             print(f"[WARN] emotion missing 'label', using fallback")
         
-        # 10. Update statistics
+        # 10. Get conscious content (Sprint 0B)
+        conscious = None
+        if hasattr(core, 'get_conscious_content'):
+            conscious = core.get_conscious_content()
+        
+        # 11. Update statistics
         self._update_stats(action_name, emotion, outcome.success)
         
         # 11. Format output
@@ -235,6 +240,9 @@ class DemoRunner:
                 outcome_valence=outcome.outcome_valence,
                 success=outcome.success,
             ))
+            # Sprint 0B: Show conscious content
+            if conscious:
+                print(f"  │ Conscious: {conscious.content_type.name} ({conscious.coalition.activation:.2f})")
     
     def _print_verbose_cycle(
         self,

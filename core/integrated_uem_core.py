@@ -1,3 +1,7 @@
+# DEPRECATED: Bu dosya artık kullanılmıyor.
+# Sprint 0B sonrası UnifiedUEMCore + WorkspaceManager kullanın.
+# Bu dosya ileride silinecektir.
+
 # core/integrated_uem_core.py
 """
 UEM Integrated Core - Global Workspace + SELF + ETHMOR Entegrasyonu

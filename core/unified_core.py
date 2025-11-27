@@ -87,6 +87,21 @@ except ImportError:
     ETHMOR_AVAILABLE = False
     EthmorSystem = None
 
+# Consciousness / Global Workspace (Sprint 0B)
+try:
+    from core.consciousness.global_workspace import (
+        WorkspaceManager,
+        BroadcastMessage,
+        ContentType,
+        WorkspaceSubscriber,
+        create_workspace_manager,
+    )
+    CONSCIOUSNESS_AVAILABLE = True
+except ImportError:
+    CONSCIOUSNESS_AVAILABLE = False
+    WorkspaceManager = None
+    BroadcastMessage = None
+
 try:
     from core.integrated_uem_core import WorldState
     WORLDSTATE_AVAILABLE = True
@@ -104,6 +119,59 @@ except ImportError:
         symbols: List[str] = field(default_factory=list)
         player_health: float = 1.0
         player_energy: float = 1.0
+
+
+# ============================================================================
+# WORKSPACE SUBSCRIBERS (Sprint 0B)
+# ============================================================================
+
+class PerceptionSubscriber:
+    """Perception modülü için workspace subscriber."""
+    
+    def __init__(self, core: "UnifiedUEMCore"):
+        self.core = core
+        self.last_broadcast: Optional[BroadcastMessage] = None
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "PerceptionSubscriber"
+    
+    async def receive_broadcast(self, message: "BroadcastMessage") -> None:
+        self.last_broadcast = message
+        self.core.logger.debug(f"[Perception] Received broadcast: {message.content_type}")
+
+
+class MemorySubscriber:
+    """Memory modülü için workspace subscriber."""
+    
+    def __init__(self, core: "UnifiedUEMCore"):
+        self.core = core
+        self.last_broadcast: Optional[BroadcastMessage] = None
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "MemorySubscriber"
+    
+    async def receive_broadcast(self, message: "BroadcastMessage") -> None:
+        self.last_broadcast = message
+        self.core.logger.debug(f"[Memory] Received broadcast: {message.content_type}")
+
+
+class PlanningSubscriber:
+    """Planning modülü için workspace subscriber."""
+    
+    def __init__(self, core: "UnifiedUEMCore"):
+        self.core = core
+        self.last_broadcast: Optional[BroadcastMessage] = None
+    
+    @property
+    def subscriber_name(self) -> str:
+        return "PlanningSubscriber"
+    
+    async def receive_broadcast(self, message: "BroadcastMessage") -> None:
+        self.last_broadcast = message
+        if message.content_type.name == "URGENCY":
+            self.core.logger.info("[Planning] URGENCY received - priority boost")
 
 
 # ============================================================================
@@ -152,6 +220,7 @@ class UnifiedUEMCore:
         self._init_empathy()
         self._init_ethmor()
         self._init_planner()
+        self._init_workspace()
         
         # Runtime state
         self.current_emotion: Dict[str, float] = {
@@ -236,6 +305,25 @@ class UnifiedUEMCore:
             ethmor_system=self.ethmor,
             logger=self.logger.getChild("Planner"),
         )
+
+    def _init_workspace(self) -> None:
+        """Initialize GlobalWorkspace (Sprint 0B)."""
+        if CONSCIOUSNESS_AVAILABLE:
+            self.workspace_manager = create_workspace_manager(
+                logger=self.logger.getChild("Workspace"),
+            )
+            self._perception_subscriber = PerceptionSubscriber(self)
+            self._memory_subscriber = MemorySubscriber(self)
+            self._planning_subscriber = PlanningSubscriber(self)
+            self.workspace_manager.register_subscriber(self._perception_subscriber)
+            self.workspace_manager.register_subscriber(self._memory_subscriber)
+            self.workspace_manager.register_subscriber(self._planning_subscriber)
+            self._last_conscious = None
+            self.logger.debug("[UnifiedCore] WorkspaceManager loaded with 3 subscribers")
+        else:
+            self.workspace_manager = None
+            self._last_conscious = None
+            self.logger.warning("[UnifiedCore] WorkspaceManager not available")
         self.logger.debug("[UnifiedCore] Planner loaded")
     
     # ========================================================================
@@ -251,6 +339,10 @@ class UnifiedUEMCore:
     def arousal(self) -> float:
         """For module compatibility."""
         return self.current_emotion.get("arousal", 0.5)
+
+    def get_conscious_content(self):
+        """Get the last conscious broadcast (Sprint 0B API)."""
+        return getattr(self, "_last_conscious", None)
     
     # ========================================================================
     # MAIN COGNITIVE CYCLE
@@ -275,40 +367,46 @@ class UnifiedUEMCore:
             t0 = time.perf_counter()
             perception_result = self._phase_perception(world_state)
             phase_times["perception"] = (time.perf_counter() - t0) * 1000
+
+            # Phase 2: WORKSPACE (Sprint 0B - conscious broadcast)
+            t0 = time.perf_counter()
+            conscious_message = await self._phase_workspace(perception_result, world_state)
+            phase_times["workspace"] = (time.perf_counter() - t0) * 1000
+
             
-            # Phase 2: MEMORY
+            # Phase 3: MEMORY
             t0 = time.perf_counter()
             memory_context = self._phase_memory(perception_result)
             phase_times["memory"] = (time.perf_counter() - t0) * 1000
             
-            # Phase 3: SELF
+            # Phase 4: SELF
             t0 = time.perf_counter()
             self_state = self._phase_self(perception_result, memory_context, world_state)
             phase_times["self"] = (time.perf_counter() - t0) * 1000
             
-            # Phase 4: APPRAISAL
+            # Phase 5: APPRAISAL
             t0 = time.perf_counter()
             appraisal_result = self._phase_appraisal(perception_result, self_state, world_state)
             phase_times["appraisal"] = (time.perf_counter() - t0) * 1000
             
-            # Phase 5: EMPATHY
+            # Phase 6: EMPATHY
             t0 = time.perf_counter()
             empathy_result = self._phase_empathy(perception_result, world_state)
             phase_times["empathy"] = (time.perf_counter() - t0) * 1000
             
-            # Phase 6: PLANNING (includes ETHMOR check)
+            # Phase 7: PLANNING (includes ETHMOR check)
             t0 = time.perf_counter()
             action_plan = self._phase_planning(
                 self_state, appraisal_result, perception_result, empathy_result
             )
             phase_times["planning"] = (time.perf_counter() - t0) * 1000
             
-            # Phase 7: EXECUTION
+            # Phase 8: EXECUTION
             t0 = time.perf_counter()
             action_result = await self._phase_execution(action_plan)
             phase_times["execution"] = (time.perf_counter() - t0) * 1000
             
-            # Phase 8: LEARNING
+            # Phase 9: LEARNING
             t0 = time.perf_counter()
             await self._phase_learning(self_state, action_plan, action_result)
             phase_times["learning"] = (time.perf_counter() - t0) * 1000
@@ -361,6 +459,35 @@ class UnifiedUEMCore:
     # ========================================================================
     # PHASE IMPLEMENTATIONS
     # ========================================================================
+
+    async def _phase_workspace(self, perception_result, world_state):
+        """Phase 2: GlobalWorkspace - conscious broadcast (Sprint 0B)."""
+        self.logger.debug(f"[Cycle {self.tick}] Phase: workspace")
+        if self.workspace_manager is None:
+            return None
+        try:
+            workspace_context = {
+                "perception": {
+                    "danger_level": getattr(world_state, "danger_level", 0.0),
+                    "symbols": getattr(world_state, "symbols", []),
+                    "objects": getattr(world_state, "objects", []),
+                },
+                "emotion": self.current_emotion,
+                "agent_state": {
+                    "health": getattr(world_state, "player_health", 1.0),
+                    "energy": getattr(world_state, "player_energy", 1.0),
+                },
+                "active_goals": [],
+            }
+            message = await self.workspace_manager.cycle(workspace_context)
+            self._last_conscious = message
+            if message:
+                self.logger.debug(f"[Workspace] Broadcast: {message.content_type.name} (activation={message.coalition.activation:.2f})")
+            return message
+        except Exception as e:
+            self.logger.warning(f"[Workspace] Failed: {e}")
+            return None
+
     
     def _phase_perception(self, world_state: WorldState) -> Any:
         """Phase 1: Process world state through perception."""
