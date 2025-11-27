@@ -231,6 +231,7 @@ class UnifiedUEMCore:
         self.last_action: Optional[ActionPlan] = None
         self.last_result: Optional[ActionResult] = None
         self.last_metrics: Optional[CycleMetrics] = None
+        self.metrics_history: List[CycleMetrics] = []  # Sprint 0C: son 100 cycle
         
         self.logger.info("[UnifiedCore] Initialized successfully")
     
@@ -343,6 +344,38 @@ class UnifiedUEMCore:
     def get_conscious_content(self):
         """Get the last conscious broadcast (Sprint 0B API)."""
         return getattr(self, "_last_conscious", None)
+
+    def get_metrics_summary(self, last_n: int = 10) -> Dict[str, Any]:
+        """Get summary of recent metrics (Sprint 0C API for MetaMind)."""
+        if not self.metrics_history:
+            return {"error": "No metrics collected"}
+        
+        recent = self.metrics_history[-last_n:]
+        
+        success_count = sum(1 for m in recent if m.action_success)
+        avg_time = sum(m.total_time_ms for m in recent) / len(recent)
+        avg_valence = sum(m.emotion_valence for m in recent) / len(recent)
+        avg_arousal = sum(m.emotion_arousal for m in recent) / len(recent)
+        
+        action_dist = {}
+        for m in recent:
+            if m.action_taken:
+                action_dist[m.action_taken] = action_dist.get(m.action_taken, 0) + 1
+        
+        conscious_dist = {}
+        for m in recent:
+            if m.conscious_type:
+                conscious_dist[m.conscious_type] = conscious_dist.get(m.conscious_type, 0) + 1
+        
+        return {
+            "total_cycles": len(recent),
+            "success_rate": success_count / len(recent) if recent else 0,
+            "avg_cycle_time_ms": avg_time,
+            "avg_valence": avg_valence,
+            "avg_arousal": avg_arousal,
+            "action_distribution": action_dist,
+            "conscious_distribution": conscious_dist,
+        }
     
     # ========================================================================
     # MAIN COGNITIVE CYCLE
@@ -423,14 +456,31 @@ class UnifiedUEMCore:
                 reasoning=["error_fallback"],
             )
         
-        # Metrics
+        # Metrics (Sprint 0C: extended)
         total_ms = (time.perf_counter() - start) * 1000
         if self.collect_metrics:
+            conscious_type = None
+            conscious_activation = None
+            if self._last_conscious:
+                conscious_type = self._last_conscious.content_type.name
+                conscious_activation = self._last_conscious.coalition.activation
+            
             self.last_metrics = CycleMetrics(
                 tick=self.tick,
                 total_time_ms=total_ms,
                 phase_times=phase_times,
+                action_taken=action_result.action_name,
+                action_success=action_result.success,
+                emotion_valence=self.current_emotion.get("valence", 0.0),
+                emotion_arousal=self.current_emotion.get("arousal", 0.5),
+                emotion_label=self.current_emotion.get("label", "neutral"),
+                conscious_type=conscious_type,
+                conscious_activation=conscious_activation,
             )
+            # Sprint 0C: History
+            self.metrics_history.append(self.last_metrics)
+            if len(self.metrics_history) > 100:
+                self.metrics_history.pop(0)
         
         self.last_result = action_result
         

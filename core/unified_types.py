@@ -96,14 +96,30 @@ class ActionResult:
 
 @dataclass
 class CycleMetrics:
-    """Performance metrics for a cognitive cycle."""
+    """Performance metrics for a cognitive cycle (Sprint 0C extended)."""
     tick: int = 0
     total_time_ms: float = 0.0
     phase_times: Dict[str, float] = field(default_factory=dict)
     
+    # Sprint 0C: Extended metrics for MetaMind
+    action_taken: Optional[str] = None
+    action_success: bool = False
+    emotion_valence: float = 0.0
+    emotion_arousal: float = 0.5
+    emotion_label: str = "neutral"
+    conscious_type: Optional[str] = None
+    conscious_activation: Optional[float] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'tick': self.tick,
             'total_time_ms': self.total_time_ms,
             'phase_times': self.phase_times,
+            'action_taken': self.action_taken,
+            'action_success': self.action_success,
+            'emotion_valence': self.emotion_valence,
+            'emotion_arousal': self.emotion_arousal,
+            'emotion_label': self.emotion_label,
+            'conscious_type': self.conscious_type,
+            'conscious_activation': self.conscious_activation,
         }
