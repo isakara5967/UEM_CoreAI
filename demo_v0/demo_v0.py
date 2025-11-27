@@ -204,20 +204,17 @@ class DemoRunner:
         self.world_builder.apply_action_effects(action_name, outcome.outcome_valence)
         
         # 9. Get emotion state
-        emotion = {"valence": 0.0, "arousal": 0.5, "emotion_label": "neutral"}
-        if hasattr(core, 'get_emotion'):
-            emotion = core.get_emotion() or emotion
-        elif hasattr(core, 'current_emotion'):
-            emotion = core.current_emotion or emotion
-            if 'emotion_label' not in emotion and hasattr(core, 'emotion_core'):
-                emotion['emotion_label'] = core.emotion_core._classify_emotion()
-        elif hasattr(core, 'emotion_core'):
-            ec = core.emotion_core
-            emotion = {
-                "valence": getattr(ec, 'valence', 0.0),
-                "arousal": getattr(ec, 'arousal', 0.5),
-                "emotion_label": ec._classify_emotion(),
-            }
+        # Get emotion state (Sprint 0A-Fix: standardized API)
+        emotion = {"valence": 0.0, "arousal": 0.5, "label": "neutral"}
+        if hasattr(core, 'current_emotion') and core.current_emotion:
+            emotion = core.current_emotion.copy()
+        # Validation with fallback (no assert)
+        if "label" not in emotion:
+            if hasattr(core, 'emotion_core'):
+                emotion["label"] = core.emotion_core._classify_emotion()
+            else:
+                emotion["label"] = "neutral"
+            print(f"[WARN] emotion missing 'label', using fallback")
         
         # 10. Update statistics
         self._update_stats(action_name, emotion, outcome.success)
@@ -266,7 +263,7 @@ class DemoRunner:
         print(format_verbose_phase("Phase 4: APPRAISAL", {
             "valence": emotion.get("valence", 0.0),
             "arousal": emotion.get("arousal", 0.5),
-            "emotion": emotion.get("emotion_label", "neutral"),
+            "emotion": emotion.get("label", "neutral"),
         }))
         
         print(format_verbose_phase("Phase 6: PLANNING", {

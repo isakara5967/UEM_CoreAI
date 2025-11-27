@@ -123,7 +123,7 @@ def format_emotion(emotion_data: Dict[str, Any]) -> str:
     """Format emotion display."""
     valence = emotion_data.get("valence", 0.0)
     arousal = emotion_data.get("arousal", 0.5)
-    label = emotion_data.get("emotion_label", "neutral")
+    label = emotion_data.get("label", "neutral")
     
     # Color code valence
     if valence >= 0.3:
@@ -144,8 +144,87 @@ def format_emotion(emotion_data: Dict[str, Any]) -> str:
         "fear": Colors.RED,
         "anger": Colors.RED + Colors.BOLD,
         "joy": Colors.GREEN,
-        "excitement": Colors.GREEN + Colors.BOLD,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
         "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
+        "neutral": Colors.GRAY,
+        "calm": Colors.CYAN,
+    }
+    emotion_colors = {
+        "fear": Colors.RED,
+        "anger": Colors.RED + Colors.BOLD,
+        "joy": Colors.GREEN,
+        "excited": Colors.GREEN + Colors.BOLD,
+        "content": Colors.GREEN,
+        "sadness": Colors.BLUE,
+        "worried": Colors.YELLOW,
         "neutral": Colors.GRAY,
         "calm": Colors.CYAN,
     }

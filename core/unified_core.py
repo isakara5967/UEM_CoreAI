@@ -475,6 +475,7 @@ class UnifiedUEMCore:
                     "valence": valence,
                     "arousal": arousal,
                     "dominance": dominance,
+                    "label": emotion_label,
                 }
                 
                 return AppraisalResult(
@@ -513,6 +514,7 @@ class UnifiedUEMCore:
         self.current_emotion = {
             "valence": valence,
             "arousal": arousal,
+            "label": emotion_label,
             "dominance": dominance,
         }
         
@@ -699,7 +701,7 @@ class UnifiedUEMCore:
     def reset(self) -> None:
         """Reset core state."""
         self.tick = 0
-        self.current_emotion = {"valence": 0.0, "arousal": 0.5, "dominance": 0.0}
+        self.current_emotion = {"valence": 0.0, "arousal": 0.5, "dominance": 0.0, "label": "neutral"}
         self.last_action = None
         self.last_result = None
         self.last_metrics = None
