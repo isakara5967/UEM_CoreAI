@@ -32,3 +32,4 @@ logs/
 data/episodic/*
 !data/episodic/.gitkeep
 
+.env
