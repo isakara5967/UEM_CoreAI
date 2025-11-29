@@ -1,6 +1,6 @@
 """
 UEM Logger - PostgreSQL-based logging system for UEM_CoreAI
-Version: 1.0 (Phase A)
+Version: 1.0 (Phase A + C)
 """
 
 from .config import LoggerConfig
@@ -10,8 +10,10 @@ from .cycles import CycleManager
 from .events import EventLogger, EventData
 from .fallback import FallbackLogger
 from .logger import UEMLogger, get_logger
+from .experiments import ExperimentRepository
+from .config_snapshots import ConfigSnapshotRepository, generate_config_id, generate_checksum
 from .utils import (
-    generate_checksum,
+    generate_checksum as utils_checksum,
     now_utc,
     iso_now,
     clamp,
@@ -36,8 +38,12 @@ __all__ = [
     # Main facade
     "UEMLogger",
     "get_logger",
-    # Utils
+    # Experiments & Config
+    "ExperimentRepository",
+    "ConfigSnapshotRepository",
+    "generate_config_id",
     "generate_checksum",
+    # Utils
     "now_utc",
     "iso_now",
     "clamp",

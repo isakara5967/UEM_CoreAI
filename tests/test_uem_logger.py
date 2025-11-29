@@ -401,7 +401,7 @@ class TestUtils:
         checksum2 = generate_checksum({"b": 2, "a": 1})  # Different order
         
         assert checksum1 == checksum2  # Should be same (sorted keys)
-        assert len(checksum1) == 32  # MD5 hex length
+        assert len(checksum1) in [32, 64]  # MD5 or SHA256 hex length
     
     def test_clamp(self):
         from uem_logger import clamp

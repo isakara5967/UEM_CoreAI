@@ -1,6 +1,6 @@
 """
 UEM PreData - Data collection for cognitive cycle analysis.
-Version: 1.0 (Phase B)
+Version: 1.0 (Phase B + C)
 """
 
 from .collector import PreDataCollector, PreData
@@ -23,6 +23,18 @@ from .tooling import (
     AdversarialDetector,
 )
 
+# Session
+from .session import (
+    SessionStageDetector,
+    SessionStage,
+    GoalClarityScorer,
+    InteractionModeClassifier,
+    InteractionMode,
+    EngagementTracker,
+    EngagementLevel,
+    ExperimentManager,
+)
+
 __version__ = "1.0.0"
 __all__ = [
     # Core
@@ -40,4 +52,13 @@ __all__ = [
     "EnvironmentProfiler",
     "PolicyManager",
     "AdversarialDetector",
+    # Session
+    "SessionStageDetector",
+    "SessionStage",
+    "GoalClarityScorer",
+    "InteractionModeClassifier",
+    "InteractionMode",
+    "EngagementTracker",
+    "EngagementLevel",
+    "ExperimentManager",
 ]
