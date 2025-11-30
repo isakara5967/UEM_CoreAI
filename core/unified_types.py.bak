@@ -54,22 +54,12 @@ class AppraisalResult:
     dominance: float = 0.0     # -1 to +1
     emotion_label: str = "neutral"
     
-    # === PreData Fields (v1.9) ===
-    valence_delta: Optional[float] = None
-    arousal_volatility: Optional[float] = None
-    engagement: Optional[float] = None
-    mood_baseline: Optional[float] = None
-    
     def to_dict(self) -> Dict[str, Any]:
         return {
             'valence': self.valence,
             'arousal': self.arousal,
             'dominance': self.dominance,
             'emotion_label': self.emotion_label,
-            'valence_delta': self.valence_delta,
-            'arousal_volatility': self.arousal_volatility,
-            'engagement': self.engagement,
-            'mood_baseline': self.mood_baseline,
         }
 
 
@@ -117,12 +107,6 @@ class CycleMetrics:
     emotion_valence: float = 0.0
     emotion_arousal: float = 0.5
     emotion_label: str = "neutral"
-    
-    # === PreData Fields (v1.9) ===
-    valence_delta: Optional[float] = None
-    arousal_volatility: Optional[float] = None
-    engagement: Optional[float] = None
-    mood_baseline: Optional[float] = None
     conscious_type: Optional[str] = None
     conscious_activation: Optional[float] = None
 

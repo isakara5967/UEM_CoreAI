@@ -28,11 +28,6 @@ class CandidateAction:
     predicted_effect: StateDelta = (0.0, 0.0, 0.0)
     utility: float = 0.0
     reasoning: List[str] = field(default_factory=list)
-    
-    # === PreData Fields (v1.9) ===
-    utility_breakdown: Optional[Dict[str, float]] = None
-    candidate_plans: Optional[List[Dict[str, Any]]] = None
-    somatic_bias: Optional[float] = None
     base_params: Dict[str, Any] = field(default_factory=dict)
     
     # Modifiers (computed during pipeline)
@@ -66,11 +61,6 @@ class ActionPlan:
     utility: float = 0.0
     reasoning: List[str] = field(default_factory=list)
     
-    # === PreData Fields (v1.9) ===
-    utility_breakdown: Optional[Dict[str, float]] = None
-    candidate_plans: Optional[List[Dict[str, Any]]] = None
-    somatic_bias: Optional[float] = None
-    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
@@ -80,9 +70,6 @@ class ActionPlan:
             'confidence': self.confidence,
             'utility': self.utility,
             'reasoning': self.reasoning,
-            'utility_breakdown': self.utility_breakdown,
-            'candidate_plans': self.candidate_plans,
-            'somatic_bias': self.somatic_bias,
         }
 
 
