@@ -208,20 +208,61 @@ class TestConflictScore:
 # ============================================================================
 
 class TestGoalOverlap:
-    """Goal overlap estimation tests."""
+    """Goal overlap estimation tests - V1.1 Heuristic."""
     
-    def test_placeholder_returns_zero(self):
-        """V1.0: Placeholder olarak 0 döndürmeli."""
+    def test_no_params_returns_zero(self):
+        """Parametre yoksa 0 döndürmeli."""
         overlap = estimate_goal_overlap()
         assert overlap == 0.0
     
-    def test_with_parameters_still_zero(self):
-        """V1.0: Parametrelerle bile 0 döndürmeli."""
+    def test_same_action_returns_half(self):
+        """Aynı aksiyon → 0.5"""
+        overlap = estimate_goal_overlap(
+            my_action="eat",
+            other_action="eat"
+        )
+        assert overlap == 0.5
+    
+    def test_same_action_case_insensitive(self):
+        """Aksiyon karşılaştırması case-insensitive olmalı."""
+        overlap = estimate_goal_overlap(
+            my_action="EAT",
+            other_action="eat"
+        )
+        assert overlap == 0.5
+    
+    def test_different_actions_no_target(self):
+        """Farklı aksiyonlar, hedef yok → 0.0"""
+        overlap = estimate_goal_overlap(
+            my_action="eat",
+            other_action="flee"
+        )
+        assert overlap == 0.0
+    
+    def test_shared_target_returns_high(self):
+        """Paylaşılan hedef → 0.7"""
+        overlap = estimate_goal_overlap(
+            shared_target="food"
+        )
+        assert overlap == 0.7
+    
+    def test_shared_target_overrides_action(self):
+        """Paylaşılan hedef, aynı aksiyondan öncelikli (0.7 > 0.5)."""
         overlap = estimate_goal_overlap(
             my_action="eat",
             other_action="eat",
             shared_target="food"
         )
+        assert overlap == 0.7
+    
+    def test_only_my_action_returns_zero(self):
+        """Sadece benim aksiyonum varsa → 0.0"""
+        overlap = estimate_goal_overlap(my_action="eat")
+        assert overlap == 0.0
+    
+    def test_only_other_action_returns_zero(self):
+        """Sadece diğer ajan aksiyonu varsa → 0.0"""
+        overlap = estimate_goal_overlap(other_action="eat")
         assert overlap == 0.0
 
 

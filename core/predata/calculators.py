@@ -160,24 +160,33 @@ def estimate_goal_overlap(
     """
     Hedef çakışmasını tahmin et.
     
-    V1.0: Placeholder olarak 0.0 döndür.
-    V1.1: Basit heuristik (same action = 0.5, shared target = 0.7)
-    V2.0: Planner entegrasyonu ile gerçek hesaplama
+    V1.1 Heuristic (Claude + Alice Konsensüs - 30 Kasım 2025):
+    - Aynı aksiyon → 0.5
+    - Paylaşılan hedef → 0.7
+    - İkisi birden → max(0.5, 0.7) = 0.7
+    - Aksi halde → 0.0
+    
+    V2.0: Planner entegrasyonu ile gerçek hesaplama (Şubat 2026)
     
     Args:
-        my_action: Benim aksiyonum
+        my_action: Benim aksiyonum (ör: "eat", "attack", "flee")
         other_action: Diğer ajanın aksiyonu
-        shared_target: Paylaşılan hedef (varsa)
+        shared_target: Paylaşılan hedef (ör: "food", "enemy", "exit")
     
     Returns:
         Hedef çakışma oranı (0-1)
-    
-    TODO: V1.1'de heuristik eklenecek
-    TODO: V2.0'da Planner entegrasyonu
     """
-    # V1.0: Placeholder
-    # İleride ayrı bir modülden beslenecek
-    return 0.0
+    overlap = 0.0
+    
+    # Aynı aksiyon → 0.5
+    if my_action and other_action and my_action.lower() == other_action.lower():
+        overlap = 0.5
+    
+    # Paylaşılan hedef → 0.7 (daha yüksek öncelik)
+    if shared_target:
+        overlap = max(overlap, 0.7)
+    
+    return overlap
 
 
 def calculate_conflict_score(
