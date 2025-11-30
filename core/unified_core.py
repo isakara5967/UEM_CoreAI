@@ -62,6 +62,38 @@ except ImportError:
     QualityFlagger = None
     LanguageDetector = None
 
+# Session tracking modules
+try:
+    from core.predata.session import (
+        SessionStageDetector,
+        GoalClarityScorer,
+        InteractionModeClassifier,
+        EngagementTracker,
+        ExperimentManager,
+    )
+    SESSION_AVAILABLE = True
+except ImportError:
+    SESSION_AVAILABLE = False
+
+# Tooling/Environment modules
+try:
+    from core.predata.tooling import (
+        ToolTracker,
+        EnvironmentProfiler,
+        PolicyManager,
+        AdversarialDetector,
+    )
+    TOOLING_AVAILABLE = True
+except ImportError:
+    TOOLING_AVAILABLE = False
+
+# Multi-Agent modules
+try:
+    from core.multi_agent import MultiAgentCoordinator, CoordinationMode
+    MULTI_AGENT_AVAILABLE = True
+except ImportError:
+    MULTI_AGENT_AVAILABLE = False
+
 import asyncio
 import logging
 import time
@@ -312,6 +344,40 @@ class UnifiedUEMCore:
             self._quality_flagger = QualityFlagger()
             self._language_detector = LanguageDetector()
             self.logger.debug("[UnifiedCore] Data Quality analyzers loaded")
+        
+        # Session tracking
+        self._session_stage = None
+        self._goal_clarity = None
+        self._interaction_mode = None
+        self._engagement_tracker = None
+        self._experiment_manager = None
+        
+        if SESSION_AVAILABLE:
+            self._session_stage = SessionStageDetector()
+            self._goal_clarity = GoalClarityScorer()
+            self._interaction_mode = InteractionModeClassifier()
+            self._engagement_tracker = EngagementTracker()
+            self._experiment_manager = ExperimentManager()
+            self.logger.debug("[UnifiedCore] Session tracking loaded")
+        
+        # Tooling/Environment
+        self._tool_tracker = None
+        self._env_profiler = None
+        self._policy_manager = None
+        self._adversarial_detector = None
+        
+        if TOOLING_AVAILABLE:
+            self._tool_tracker = ToolTracker()
+            self._env_profiler = EnvironmentProfiler()
+            self._policy_manager = PolicyManager()
+            self._adversarial_detector = AdversarialDetector()
+            self.logger.debug("[UnifiedCore] Tooling modules loaded")
+        
+        # Multi-Agent
+        self._ma_coordinator = None
+        if MULTI_AGENT_AVAILABLE:
+            self._ma_coordinator = MultiAgentCoordinator()
+            self.logger.debug("[UnifiedCore] Multi-Agent coordinator loaded")
         self.logger.info("[UnifiedCore] Initialized successfully")
     
     # ========================================================================
@@ -687,6 +753,48 @@ class UnifiedUEMCore:
             # PreData: ltm_write_count (memory stored in learning phase)
             ltm_write_count = 1 if action_result.success else 0  # Simplified: 1 event per cycle
             self._current_predata['ltm_write_count'] = ltm_write_count
+            
+            # Session PreData
+            if SESSION_AVAILABLE and self._session_stage is not None:
+                try:
+                    session_predata = {
+                        'session_stage': self._session_stage.get_stage(self.tick),
+                        'user_goal_clarity': self._goal_clarity.get_average() if self._goal_clarity else None,
+                        'interaction_mode': self._interaction_mode.get_dominant_mode() if self._interaction_mode else None,
+                        'user_engagement_level': self._engagement_tracker.current_level() if self._engagement_tracker else None,
+                        'experiment_tag': None,  # Set externally
+                        'ab_bucket': None,  # Set externally
+                    }
+                    self._current_predata.update(session_predata)
+                except Exception:
+                    pass
+            
+            # Tooling PreData
+            if TOOLING_AVAILABLE and self._tool_tracker is not None:
+                try:
+                    tooling_predata = {
+                        'tool_usage_summary': self._tool_tracker.get_summary() if self._tool_tracker else None,
+                        'environment_profile': self._env_profiler.to_dict() if self._env_profiler else None,
+                        'policy_set_id': self._policy_manager.current_policy_set if self._policy_manager else None,
+                        'policy_conflict_score': 0.0,
+                        'adversarial_input_score': self._adversarial_detector.get_score(str(world_state)) if self._adversarial_detector else 0.0,
+                    }
+                    self._current_predata.update(tooling_predata)
+                except Exception:
+                    pass
+            
+            # Multi-Agent PreData
+            if MULTI_AGENT_AVAILABLE and self._ma_coordinator is not None:
+                try:
+                    ma_summary = self._ma_coordinator.get_summary()
+                    ma_predata = {
+                        'ma_agent_count': ma_summary.get('agent_count', 1),
+                        'ma_coordination_mode': ma_summary.get('mode', 'independent'),
+                        'ma_conflict_score': ma_summary.get('conflict_score', 0.0),
+                    }
+                    self._current_predata.update(ma_predata)
+                except Exception:
+                    pass
             
             phase_times["learning"] = (time.perf_counter() - t0) * 1000
             
