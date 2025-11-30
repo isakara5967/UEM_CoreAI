@@ -28,6 +28,12 @@ class MemoryContext:
     """Memory retrieval results."""
     similar_experiences: List[Dict[str, Any]] = field(default_factory=list)
     recent_events: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # === PreData Fields (v1.9) ===
+    retrieval_count: Optional[int] = None
+    memory_relevance: Optional[float] = None
+    working_memory_load: Optional[float] = None
+    ltm_write_count: Optional[int] = None
 
 
 # ============================================================================
@@ -40,6 +46,10 @@ class SelfState:
     state_vector: StateVector
     state_delta: StateDelta
     goals: List[Goal] = field(default_factory=list)
+    
+    # === PreData Fields (v1.9) ===
+    confidence_score: Optional[float] = None
+    resource_usage: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================

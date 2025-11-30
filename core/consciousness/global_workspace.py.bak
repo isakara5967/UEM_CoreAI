@@ -81,11 +81,6 @@ class BroadcastMessage:
     cycle_number: int
     priority: BroadcastPriority = BroadcastPriority.NORMAL
     
-    # === PreData Fields (v1.9) ===
-    coalition_strength: Optional[float] = None
-    competition_intensity: Optional[float] = None
-    conscious_threshold: Optional[float] = None
-    
     def to_dict(self) -> Dict[str, Any]:
         return {
             'coalition_id': self.coalition.id,
@@ -94,9 +89,6 @@ class BroadcastMessage:
             'timestamp': self.timestamp,
             'cycle_number': self.cycle_number,
             'priority': self.priority.value,
-            'coalition_strength': self.coalition_strength,
-            'competition_intensity': self.competition_intensity,
-            'conscious_threshold': self.conscious_threshold,
         }
 
 
