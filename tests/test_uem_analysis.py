@@ -3,12 +3,12 @@ import pytest
 import sys
 sys.path.insert(0, '.')
 
-from uem_analysis import (
+from core.metamind.metrics import (
     CoherenceScorer, EfficiencyScorer, QualityScorer, TrustAggregator,
     FailureTracker, ActionAnalyzer, TrendAnalyzer,
     AlertManager, Alert, AlertSeverity, AlertCategory,
 )
-from uem_analysis.pattern.trend import TrendDirection
+from core.metamind.metrics.pattern.trend import TrendDirection
 
 
 # ==================== Scoring Tests ====================
@@ -434,8 +434,8 @@ class TestAlertManager:
 
 # ==================== Clustering Tests ====================
 
-from uem_analysis.clustering import BehaviorClusterer
-from uem_analysis.clustering.behavior import BehaviorCluster
+from core.metamind.metrics.clustering import BehaviorClusterer
+from core.metamind.metrics.clustering.behavior import BehaviorCluster
 
 
 class TestBehaviorClusterer:

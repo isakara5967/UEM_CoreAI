@@ -3,7 +3,7 @@ import pytest
 import sys
 sys.path.insert(0, '.')
 
-from uem_predata.multi_agent import MultiAgentCoordinator, CoordinationMode
+from core.predata.multi_agent import MultiAgentCoordinator, CoordinationMode
 
 
 class TestMultiAgentCoordinator:

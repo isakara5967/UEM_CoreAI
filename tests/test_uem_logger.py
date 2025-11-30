@@ -4,7 +4,7 @@ import asyncio
 import sys
 sys.path.insert(0, '.')
 
-from uem_logger import (
+from core.logger import (
     LoggerConfig, DatabaseManager, RunManager,
     CycleManager, EventLogger, EventData, FallbackLogger
 )
@@ -259,7 +259,7 @@ class TestUEMLoggerFacade:
     
     @pytest.mark.asyncio
     async def test_full_workflow(self):
-        from uem_logger import UEMLogger
+        from core.logger import UEMLogger
         
         logger = UEMLogger()
         await logger.connect()
@@ -286,7 +286,7 @@ class TestUEMLoggerFacade:
     
     @pytest.mark.asyncio
     async def test_denormalization(self):
-        from uem_logger import UEMLogger
+        from core.logger import UEMLogger
         
         logger = UEMLogger()
         await logger.connect()
@@ -325,7 +325,7 @@ class TestUEMLoggerFacade:
     
     @pytest.mark.asyncio
     async def test_health_check(self):
-        from uem_logger import UEMLogger
+        from core.logger import UEMLogger
         
         logger = UEMLogger()
         await logger.connect()
@@ -342,7 +342,7 @@ class TestMetricRegistry:
     
     @pytest.mark.asyncio
     async def test_registry_populated(self):
-        from uem_logger import DatabaseManager
+        from core.logger import DatabaseManager
         
         db = DatabaseManager()
         await db.connect()
@@ -354,7 +354,7 @@ class TestMetricRegistry:
     
     @pytest.mark.asyncio
     async def test_registry_groups(self):
-        from uem_logger import DatabaseManager
+        from core.logger import DatabaseManager
         
         db = DatabaseManager()
         await db.connect()
@@ -373,7 +373,7 @@ class TestMetricRegistry:
     
     @pytest.mark.asyncio
     async def test_metric_lookup(self):
-        from uem_logger import DatabaseManager
+        from core.logger import DatabaseManager
         
         db = DatabaseManager()
         await db.connect()
@@ -394,7 +394,7 @@ class TestUtils:
     """Utils tests."""
     
     def test_generate_checksum(self):
-        from uem_logger import generate_checksum
+        from core.logger import generate_checksum
         
         data = {"a": 1, "b": 2}
         checksum1 = generate_checksum(data)
@@ -404,7 +404,7 @@ class TestUtils:
         assert len(checksum1) in [32, 64]  # MD5 or SHA256 hex length
     
     def test_clamp(self):
-        from uem_logger import clamp
+        from core.logger import clamp
         
         assert clamp(0.5) == 0.5
         assert clamp(-0.5) == 0.0
@@ -413,7 +413,7 @@ class TestUtils:
         assert clamp(0.1, 0.2, 0.8) == 0.2
     
     def test_extract_denorm_fields(self):
-        from uem_logger import extract_denorm_fields
+        from core.logger import extract_denorm_fields
         
         # Emotion
         result = extract_denorm_fields({"valence": 0.5}, "emotion")

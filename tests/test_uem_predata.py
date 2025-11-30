@@ -3,12 +3,12 @@ import pytest
 import sys
 sys.path.insert(0, '.')
 
-from uem_predata import (
+from core.predata import (
     PreDataCollector, PreData,
     ModalityDetector, NoiseEstimator, TrustScorer, QualityFlagger, LanguageDetector,
     ToolTracker, ToolUsage, EnvironmentProfiler, PolicyManager, AdversarialDetector,
 )
-from uem_predata.tooling.policy import Policy, PolicyType
+from core.predata.tooling.policy import Policy, PolicyType
 
 
 # ==================== PreData Collector Tests ====================

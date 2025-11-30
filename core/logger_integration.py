@@ -11,7 +11,7 @@ import time
 # Import logger
 import sys
 sys.path.insert(0, '.')
-from uem_logger import UEMLogger, LoggerConfig
+from core.logger import UEMLogger, LoggerConfig
 
 logger = logging.getLogger("UEM.LoggerIntegration")
 

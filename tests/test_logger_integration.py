@@ -4,7 +4,7 @@ import sys
 sys.path.insert(0, '.')
 
 from core.logger_integration import CoreLoggerIntegration, CycleLogData
-from uem_logger import UEMLogger
+from core.logger import UEMLogger
 
 
 class TestCycleLogData:

@@ -3,7 +3,7 @@ import pytest
 import sys
 sys.path.insert(0, '.')
 
-from uem_logger import (
+from core.logger import (
     DatabaseManager, ExperimentRepository, ConfigSnapshotRepository,
     generate_config_id, generate_checksum
 )

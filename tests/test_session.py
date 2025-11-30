@@ -3,14 +3,14 @@ import pytest
 import sys
 sys.path.insert(0, '.')
 
-from uem_predata.session import (
+from core.predata.session import (
     SessionStageDetector, SessionStage,
     GoalClarityScorer,
     InteractionModeClassifier, InteractionMode,
     EngagementTracker, EngagementLevel,
     ExperimentManager,
 )
-from uem_predata.session.experiment import Experiment
+from core.predata.session.experiment import Experiment
 
 
 # ==================== Session Stage Tests ====================
