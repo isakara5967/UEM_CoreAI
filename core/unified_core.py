@@ -796,6 +796,45 @@ class UnifiedUEMCore:
                 except Exception:
                     pass
             
+            # === Remaining 6 PreData Fields ===
+            
+            # 1. output_language (same as input for now)
+            self._current_predata['output_language'] = self._current_predata.get('input_language', 'unknown')
+            
+            # 2. primary_language (run-level, but tracked per cycle)
+            self._current_predata['primary_language'] = self._current_predata.get('input_language', 'unknown')
+            
+            # 3. cycle_complexity (based on phase count and processing)
+            cycle_complexity = {
+                'phase_count': len(phase_times),
+                'total_time_ms': sum(phase_times.values()),
+                'memory_retrievals': self._current_predata.get('retrieval_count', 0),
+                'has_empathy': hasattr(self, '_empathy_active') and self._empathy_active,
+                'coalition_formed': self._current_predata.get('coalition_strength', 0) > 0.3,
+            }
+            self._current_predata['cycle_complexity'] = cycle_complexity
+            
+            # 4. decision_trace (action selection reasoning)
+            decision_trace = {
+                'selected_action': action_plan.action if action_plan else None,
+                'utility': action_plan.utility if action_plan else 0.0,
+                'alternatives_count': len(self._current_predata.get('candidate_plans', [])),
+                'ethmor_decision': self._current_predata.get('ethmor_decision', 'ALLOW'),
+                'somatic_bias': self._current_predata.get('somatic_bias', 0.0),
+            }
+            self._current_predata['decision_trace'] = decision_trace
+            
+            # 5. input_quality_score (derived from DQ fields)
+            noise = self._current_predata.get('input_noise_level', 0.0)
+            trust = self._current_predata.get('source_trust_score', 1.0)
+            flags = self._current_predata.get('data_quality_flags', [])
+            flag_penalty = len([f for f in flags if f != 'clean']) * 0.1
+            input_quality_score = max(0.0, min(1.0, (1.0 - noise) * trust - flag_penalty))
+            self._current_predata['input_quality_score'] = round(input_quality_score, 3)
+            
+            # 6. empathy_score (placeholder - 0.5 default, will be computed by empathy module)
+            self._current_predata['empathy_score'] = getattr(self, '_last_empathy_score', 0.5)
+            
             phase_times["learning"] = (time.perf_counter() - t0) * 1000
             
         except Exception as e:
