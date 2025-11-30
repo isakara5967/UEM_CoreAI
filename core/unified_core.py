@@ -44,6 +44,24 @@ except ImportError:
     PlannerPreDataCalculator = None
     PerceptionPreDataCalculator = None
 
+# Data Quality modules
+try:
+    from core.predata.data_quality import (
+        ModalityDetector,
+        NoiseEstimator,
+        TrustScorer,
+        QualityFlagger,
+        LanguageDetector,
+    )
+    DATA_QUALITY_AVAILABLE = True
+except ImportError:
+    DATA_QUALITY_AVAILABLE = False
+    ModalityDetector = None
+    NoiseEstimator = None
+    TrustScorer = None
+    QualityFlagger = None
+    LanguageDetector = None
+
 import asyncio
 import logging
 import time
@@ -279,6 +297,21 @@ class UnifiedUEMCore:
             self._perception_predata = PerceptionPreDataCalculator()
             self._self_predata = SelfPreDataCalculator()
             self.logger.debug("[UnifiedCore] PreData calculators loaded")
+        
+        # Data Quality analyzers
+        self._modality_detector = None
+        self._noise_estimator = None
+        self._trust_scorer = None
+        self._quality_flagger = None
+        self._language_detector = None
+        
+        if DATA_QUALITY_AVAILABLE:
+            self._modality_detector = ModalityDetector()
+            self._noise_estimator = NoiseEstimator()
+            self._trust_scorer = TrustScorer()
+            self._quality_flagger = QualityFlagger()
+            self._language_detector = LanguageDetector()
+            self.logger.debug("[UnifiedCore] Data Quality analyzers loaded")
         self.logger.info("[UnifiedCore] Initialized successfully")
     
     # ========================================================================
@@ -463,6 +496,33 @@ class UnifiedUEMCore:
                     symbols=getattr(world_state, 'symbols', []),
                 )
                 self._current_predata.update(perception_predata)
+            
+            # Data Quality: compute input quality metrics
+            dq_predata = {}
+            if DATA_QUALITY_AVAILABLE and self._modality_detector is not None:
+                try:
+                    # Build input data representation
+                    input_data = {
+                        'objects': getattr(world_state, 'objects', []),
+                        'agents': getattr(world_state, 'agents', []),
+                        'symbols': getattr(world_state, 'symbols', []),
+                        'events': getattr(world_state, 'events', []),
+                    }
+                    
+                    # Extract text for language detection
+                    text_content = ' '.join(getattr(world_state, 'symbols', []) or [])
+                    
+                    # Compute Data Quality fields
+                    dq_predata = {
+                        'input_modality_mix': self._modality_detector.detect(input_data),
+                        'input_noise_level': self._noise_estimator.estimate(input_data),
+                        'source_trust_score': self._trust_scorer.score(input_data, source='world_state'),
+                        'data_quality_flags': self._quality_flagger.check(input_data),
+                        'input_language': self._language_detector.detect(text_content) if text_content else 'unknown',
+                    }
+                    self._current_predata.update(dq_predata)
+                except Exception as e:
+                    self.logger.debug(f"[DataQuality] Skipped: {e}")
             
             # Logger Integration: perception
             if self.log_integration:
