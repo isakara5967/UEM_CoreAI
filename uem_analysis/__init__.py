@@ -1,5 +1,5 @@
 """
-MetaMind - Meta-cognitive analysis and metrics derivation.
+UEM Analysis - Meta-cognitive analysis and metrics derivation.
 Version: 1.0 (Phase D)
 """
 
@@ -38,3 +38,5 @@ __all__ = [
     "AlertSeverity",
     "AlertCategory",
 ]
+
+from .clustering import BehaviorClusterer

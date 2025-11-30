@@ -19,6 +19,14 @@ Date: 26 November 2025
 
 from __future__ import annotations
 
+# Logger Integration (Phase E)
+try:
+    from core.logger_integration import CoreLoggerIntegration
+    LOGGER_INTEGRATION_AVAILABLE = True
+except ImportError:
+    LOGGER_INTEGRATION_AVAILABLE = False
+    CoreLoggerIntegration = None
+
 import asyncio
 import logging
 import time
@@ -233,6 +241,13 @@ class UnifiedUEMCore:
         self.last_metrics: Optional[CycleMetrics] = None
         self.metrics_history: List[CycleMetrics] = []  # Sprint 0C: son 100 cycle
         
+
+        # Logger Integration (Phase E)
+        self.log_integration = None
+        if LOGGER_INTEGRATION_AVAILABLE:
+            self.log_integration = CoreLoggerIntegration(enabled=True)
+            self.logger.debug("[UnifiedCore] LoggerIntegration loaded")
+
         self.logger.info("[UnifiedCore] Initialized successfully")
     
     # ========================================================================
@@ -392,6 +407,10 @@ class UnifiedUEMCore:
             ActionResult with outcome
         """
         self.tick += 1
+        
+        # Logger Integration: cycle start
+        if self.log_integration:
+            self.log_integration.on_cycle_start(tick=self.tick, cycle_id=self.tick)
         start = time.perf_counter()
         phase_times: Dict[str, float] = {}
         
@@ -399,6 +418,12 @@ class UnifiedUEMCore:
             # Phase 1: PERCEPTION
             t0 = time.perf_counter()
             perception_result = self._phase_perception(world_state)
+            
+            # Logger Integration: perception
+            if self.log_integration:
+                novelty = getattr(perception_result, 'novelty_score', None)
+                focus = getattr(perception_result, 'attention_focus', None)
+                self.log_integration.on_perception(novelty_score=novelty, attention_focus=focus)
             phase_times["perception"] = (time.perf_counter() - t0) * 1000
 
             # Phase 2: WORKSPACE (Sprint 0B - conscious broadcast)
@@ -420,6 +445,14 @@ class UnifiedUEMCore:
             # Phase 5: APPRAISAL
             t0 = time.perf_counter()
             appraisal_result = self._phase_appraisal(perception_result, self_state, world_state)
+            
+            # Logger Integration: emotion
+            if self.log_integration:
+                self.log_integration.on_emotion(
+                    valence=appraisal_result.valence,
+                    arousal=appraisal_result.arousal,
+                    label=appraisal_result.emotion_label
+                )
             phase_times["appraisal"] = (time.perf_counter() - t0) * 1000
             
             # Phase 6: EMPATHY
@@ -432,11 +465,26 @@ class UnifiedUEMCore:
             action_plan = self._phase_planning(
                 self_state, appraisal_result, perception_result, empathy_result
             )
+            
+            # Logger Integration: planning
+            if self.log_integration:
+                self.log_integration.on_planning(
+                    action=action_plan.action,
+                    utility=action_plan.utility,
+                    candidates=getattr(action_plan, 'candidates', None)
+                )
             phase_times["planning"] = (time.perf_counter() - t0) * 1000
             
             # Phase 8: EXECUTION
             t0 = time.perf_counter()
             action_result = await self._phase_execution(action_plan)
+            
+            # Logger Integration: cycle end (fire and forget)
+            if self.log_integration:
+                try:
+                    await self.log_integration.on_cycle_end(success=action_result.success)
+                except Exception:
+                    pass  # Don't break cycle if logging fails
             phase_times["execution"] = (time.perf_counter() - t0) * 1000
             
             # Phase 9: LEARNING

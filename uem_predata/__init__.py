@@ -62,3 +62,6 @@ __all__ = [
     "EngagementLevel",
     "ExperimentManager",
 ]
+
+# Multi-Agent (v2+ placeholder)
+from .multi_agent import MultiAgentCoordinator, CoordinationMode

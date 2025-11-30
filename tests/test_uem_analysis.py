@@ -1,14 +1,14 @@
-"""Tests for metamind module - Phase D."""
+"""Tests for uem_analysis module - Phase D."""
 import pytest
 import sys
 sys.path.insert(0, '.')
 
-from metamind import (
+from uem_analysis import (
     CoherenceScorer, EfficiencyScorer, QualityScorer, TrustAggregator,
     FailureTracker, ActionAnalyzer, TrendAnalyzer,
     AlertManager, Alert, AlertSeverity, AlertCategory,
 )
-from metamind.pattern.trend import TrendDirection
+from uem_analysis.pattern.trend import TrendDirection
 
 
 # ==================== Scoring Tests ====================
@@ -430,3 +430,88 @@ class TestAlertManager:
         assert "alert_id" in d
         assert "severity" in d
         assert d["severity"] == "warning"
+
+
+# ==================== Clustering Tests ====================
+
+from uem_analysis.clustering import BehaviorClusterer
+from uem_analysis.clustering.behavior import BehaviorCluster
+
+
+class TestBehaviorClusterer:
+    """BehaviorClusterer tests."""
+    
+    def test_unknown_with_few_actions(self):
+        clusterer = BehaviorClusterer()
+        clusterer.add_action("explore")
+        clusterer.add_action("wait")
+        
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.UNKNOWN
+    
+    def test_explorer_cluster(self):
+        clusterer = BehaviorClusterer()
+        actions = ["explore", "explore", "wait", "approach", "explore", 
+                   "flee", "explore", "help", "explore", "attack"]
+        for a in actions:
+            clusterer.add_action(a)
+        
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.EXPLORER
+        assert result.confidence > 0.5
+    
+    def test_stuck_cluster(self):
+        clusterer = BehaviorClusterer()
+        for _ in range(10):
+            clusterer.add_action("wait")
+        
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.STUCK
+        assert result.confidence >= 0.9
+    
+    def test_aggressive_cluster(self):
+        clusterer = BehaviorClusterer()
+        for _ in range(6):
+            clusterer.add_action("attack", {"arousal": 0.8})
+        for _ in range(4):
+            clusterer.add_action("approach", {"arousal": 0.7})
+        
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.AGGRESSIVE
+    
+    def test_cautious_cluster(self):
+        clusterer = BehaviorClusterer()
+        actions = ["wait", "wait", "flee", "wait", "flee", 
+                   "wait", "flee", "wait", "explore", "wait"]
+        for a in actions:
+            clusterer.add_action(a)
+        
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.CAUTIOUS
+    
+    def test_social_cluster(self):
+        clusterer = BehaviorClusterer()
+        actions = ["help", "approach", "help", "help", "approach",
+                   "help", "wait", "approach", "help", "explore"]
+        for a in actions:
+            clusterer.add_action(a)
+        
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.SOCIAL
+    
+    def test_get_cluster_id(self):
+        clusterer = BehaviorClusterer()
+        for _ in range(10):
+            clusterer.add_action("wait")
+        
+        cluster_id = clusterer.get_cluster_id()
+        assert cluster_id == "stuck"
+    
+    def test_reset(self):
+        clusterer = BehaviorClusterer()
+        for _ in range(10):
+            clusterer.add_action("attack")
+        
+        clusterer.reset()
+        result = clusterer.get_cluster()
+        assert result.cluster == BehaviorCluster.UNKNOWN
