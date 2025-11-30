@@ -475,17 +475,55 @@ class UnifiedUEMCore:
             # Phase 2: WORKSPACE (Sprint 0B - conscious broadcast)
             t0 = time.perf_counter()
             conscious_message = await self._phase_workspace(perception_result, world_state)
+            
+            # PreData: workspace
+            if conscious_message is not None and PREDATA_CALCULATORS_AVAILABLE:
+                coalition_strength = conscious_message.coalition.activation if conscious_message.coalition else 0.0
+                competition_intensity = WorkspacePreDataCalculator.compute_competition_intensity(
+                    winner_activation=coalition_strength,
+                    total_activation=coalition_strength * 1.2,  # Approximate
+                    coalition_count=1,
+                )
+                workspace_predata = {
+                    'coalition_strength': coalition_strength,
+                    'competition_intensity': competition_intensity,
+                    'conscious_threshold': getattr(self.workspace_manager, 'threshold', 0.4),
+                    'broadcast_content': conscious_message.content_type.name if conscious_message else None,
+                }
+                self._current_predata.update(workspace_predata)
             phase_times["workspace"] = (time.perf_counter() - t0) * 1000
 
             
             # Phase 3: MEMORY
             t0 = time.perf_counter()
             memory_context = self._phase_memory(perception_result)
+            
+            # PreData: memory
+            if PREDATA_CALCULATORS_AVAILABLE:
+                retrieval_count = len(memory_context.similar_experiences) + len(memory_context.recent_events)
+                similarity_scores = [exp.get('similarity', 0.5) for exp in memory_context.similar_experiences] if memory_context.similar_experiences else []
+                memory_predata = {
+                    'retrieval_count': retrieval_count,
+                    'memory_relevance': MemoryPreDataCalculator.compute_memory_relevance(similarity_scores),
+                    'working_memory_load': MemoryPreDataCalculator.compute_working_memory_load(retrieval_count),
+                }
+                self._current_predata.update(memory_predata)
             phase_times["memory"] = (time.perf_counter() - t0) * 1000
             
             # Phase 4: SELF
             t0 = time.perf_counter()
             self_state = self._phase_self(perception_result, memory_context, world_state)
+            
+            # PreData: self
+            if self._self_predata is not None:
+                confidence = self._self_predata.compute_confidence_score()
+                self_predata = {
+                    'confidence_score': confidence,
+                    'resource_usage': SelfPreDataCalculator.compute_resource_usage(
+                        cpu_time_ms=phase_times.get("perception", 0) + phase_times.get("memory", 0),
+                    ),
+                }
+                self._current_predata.update(self_predata)
             phase_times["self"] = (time.perf_counter() - t0) * 1000
             
             # Phase 5: APPRAISAL
@@ -561,6 +599,13 @@ class UnifiedUEMCore:
             # Phase 9: LEARNING
             t0 = time.perf_counter()
             await self._phase_learning(self_state, action_plan, action_result)
+            
+            # PreData: record outcome for self confidence
+            if self._self_predata is not None:
+                self._self_predata.record_outcome(
+                    success=action_result.success,
+                    prediction_error=abs(action_result.outcome_valence - action_plan.utility) if action_plan else 0.0,
+                )
             phase_times["learning"] = (time.perf_counter() - t0) * 1000
             
         except Exception as e:
