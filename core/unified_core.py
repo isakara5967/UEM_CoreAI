@@ -27,6 +27,23 @@ except ImportError:
     LOGGER_INTEGRATION_AVAILABLE = False
     CoreLoggerIntegration = None
 
+# PreData Calculators (Phase 1 Integration)
+try:
+    from core.emotion.predata_calculator import EmotionPreDataCalculator
+    from core.planning.predata_calculator import PlannerPreDataCalculator
+    from core.perception.predata_calculator import PerceptionPreDataCalculator
+    from core.predata.module_calculators import (
+        WorkspacePreDataCalculator,
+        MemoryPreDataCalculator,
+        SelfPreDataCalculator,
+    )
+    PREDATA_CALCULATORS_AVAILABLE = True
+except ImportError:
+    PREDATA_CALCULATORS_AVAILABLE = False
+    EmotionPreDataCalculator = None
+    PlannerPreDataCalculator = None
+    PerceptionPreDataCalculator = None
+
 import asyncio
 import logging
 import time
@@ -248,6 +265,20 @@ class UnifiedUEMCore:
             self.log_integration = CoreLoggerIntegration(enabled=True)
             self.logger.debug("[UnifiedCore] LoggerIntegration loaded")
 
+
+        # PreData Calculators (Phase 1 Integration)
+        self._emotion_predata = None
+        self._planner_predata = None
+        self._perception_predata = None
+        self._self_predata = None
+        self._current_predata: Dict[str, Any] = {}
+        
+        if PREDATA_CALCULATORS_AVAILABLE:
+            self._emotion_predata = EmotionPreDataCalculator()
+            self._planner_predata = PlannerPreDataCalculator()
+            self._perception_predata = PerceptionPreDataCalculator()
+            self._self_predata = SelfPreDataCalculator()
+            self.logger.debug("[UnifiedCore] PreData calculators loaded")
         self.logger.info("[UnifiedCore] Initialized successfully")
     
     # ========================================================================
@@ -408,6 +439,9 @@ class UnifiedUEMCore:
         """
         self.tick += 1
         
+        # Reset PreData for new cycle
+        self._current_predata = {}
+        
         # Logger Integration: cycle start
         if self.log_integration:
             self.log_integration.on_cycle_start(tick=self.tick, cycle_id=self.tick)
@@ -419,11 +453,23 @@ class UnifiedUEMCore:
             t0 = time.perf_counter()
             perception_result = self._phase_perception(world_state)
             
+            # PreData: perception
+            perception_predata = {}
+            if self._perception_predata is not None:
+                perception_predata = self._perception_predata.compute(
+                    objects=getattr(world_state, 'objects', []),
+                    agents=getattr(world_state, 'agents', []),
+                    danger_level=getattr(world_state, 'danger_level', 0.0),
+                    symbols=getattr(world_state, 'symbols', []),
+                )
+                self._current_predata.update(perception_predata)
+            
             # Logger Integration: perception
             if self.log_integration:
-                novelty = getattr(perception_result, 'novelty_score', None)
-                focus = getattr(perception_result, 'attention_focus', None)
-                self.log_integration.on_perception(novelty_score=novelty, attention_focus=focus)
+                self.log_integration.on_perception(
+                    novelty_score=perception_predata.get('novelty_score'),
+                    attention_focus=perception_predata.get('attention_focus'),
+                )
             phase_times["perception"] = (time.perf_counter() - t0) * 1000
 
             # Phase 2: WORKSPACE (Sprint 0B - conscious broadcast)
@@ -446,12 +492,23 @@ class UnifiedUEMCore:
             t0 = time.perf_counter()
             appraisal_result = self._phase_appraisal(perception_result, self_state, world_state)
             
+            # PreData: emotion
+            emotion_predata = {}
+            if self._emotion_predata is not None:
+                emotion_predata = self._emotion_predata.compute(
+                    valence=appraisal_result.valence,
+                    arousal=appraisal_result.arousal,
+                )
+                self._current_predata.update(emotion_predata)
+            
             # Logger Integration: emotion
             if self.log_integration:
                 self.log_integration.on_emotion(
                     valence=appraisal_result.valence,
                     arousal=appraisal_result.arousal,
-                    label=appraisal_result.emotion_label
+                    label=appraisal_result.emotion_label,
+                    valence_delta=emotion_predata.get('valence_delta'),
+                    mood_baseline=emotion_predata.get('mood_baseline'),
                 )
             phase_times["appraisal"] = (time.perf_counter() - t0) * 1000
             
@@ -466,12 +523,26 @@ class UnifiedUEMCore:
                 self_state, appraisal_result, perception_result, empathy_result
             )
             
+            # PreData: planning
+            planning_predata = {}
+            if self._planner_predata is not None:
+                self._planner_predata.reset()
+                # Add selected action as candidate
+                self._planner_predata.add_candidate(
+                    action_plan.action,
+                    action_plan.utility,
+                    action_plan.reasoning[0] if action_plan.reasoning else "",
+                )
+                planning_predata = self._planner_predata.get_predata()
+                self._current_predata.update(planning_predata)
+            
             # Logger Integration: planning
             if self.log_integration:
                 self.log_integration.on_planning(
                     action=action_plan.action,
                     utility=action_plan.utility,
-                    candidates=getattr(action_plan, 'candidates', None)
+                    candidates=planning_predata.get('candidate_plans'),
+                    utility_breakdown=planning_predata.get('utility_breakdown'),
                 )
             phase_times["planning"] = (time.perf_counter() - t0) * 1000
             
