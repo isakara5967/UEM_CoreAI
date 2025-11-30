@@ -1300,34 +1300,78 @@ class UnifiedUEMCore:
         perception_result: Any,
         world_state: WorldState,
     ) -> Optional[Any]:
-        """Phase 5: Empathy computation (if other agents present)."""
+        """
+        Phase 6: Empathy computation for ALL agents present.
+        
+        V1.1 Update (30 Kasım 2025):
+        - Tüm ajanlar için empati hesapla
+        - self._empathy_results listesine kaydet
+        - İlk sonucu döndür (backward compatibility)
+        """
         self.logger.debug(f"[Cycle {self.tick}] Phase: empathy")
+        
+        # Reset empathy results for this cycle
+        self._empathy_results = []
         
         if self.empathy is None:
             return None
         
-        # Check for agents
+        # Check for agents from world_state or perception_result
         agents = getattr(world_state, 'agents', [])
+        if not agents:
+            # Try perception_result.entities
+            agents = getattr(perception_result, 'entities', [])
+        if not agents:
+            # Try perception_result.agents
+            agents = getattr(perception_result, 'agents', [])
+        
         if not agents:
             return None
         
+        first_result = None
+        
         try:
-            # Get first agent (v1: single agent)
-            other = agents[0]
-            
-            # Build OtherEntity
             if EMPATHY_AVAILABLE:
-                other_entity = OtherEntity(
-                    entity_id=other.get('id', 'unknown'),
-                    state_vector=(0.5, 0.5, 0.5),  # Inferred
-                    valence=other.get('valence', 0.0),
-                    relationship=other.get('relation', 0.0),
-                )
-                return self.empathy.compute(other_entity)
+                for idx, agent in enumerate(agents):
+                    try:
+                        # Build OtherEntity from agent data
+                        if isinstance(agent, dict):
+                            other_entity = OtherEntity(
+                                entity_id=agent.get('id', f'agent_{idx}'),
+                                state_vector=agent.get('state_vector', (0.5, 0.5, 0.5)),
+                                valence=agent.get('valence', 0.0),
+                                relationship=agent.get('relation', agent.get('relationship', 0.0)),
+                            )
+                        else:
+                            # Agent is an object
+                            other_entity = OtherEntity(
+                                entity_id=getattr(agent, 'id', getattr(agent, 'entity_id', f'agent_{idx}')),
+                                state_vector=getattr(agent, 'state_vector', (0.5, 0.5, 0.5)),
+                                valence=getattr(agent, 'valence', 0.0),
+                                relationship=getattr(agent, 'relation', getattr(agent, 'relationship', 0.0)),
+                            )
+                        
+                        # Compute empathy for this agent
+                        empathy_result = self.empathy.compute(other_entity)
+                        self._empathy_results.append(empathy_result)
+                        
+                        if first_result is None:
+                            first_result = empathy_result
+                        
+                        self.logger.debug(
+                            f"[Empathy] Agent {other_entity.entity_id}: "
+                            f"level={empathy_result.empathy_level:.2f}, "
+                            f"resonance={empathy_result.resonance:.2f}"
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"[Empathy] Failed for agent {idx}: {e}")
+                        continue
+                
+                self.logger.debug(f"[Empathy] Computed for {len(self._empathy_results)} agents")
         except Exception as e:
             self.logger.warning(f"[Empathy] Failed: {e}")
         
-        return None
+        return first_result
     
     def _phase_planning(
         self,
