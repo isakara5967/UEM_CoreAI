@@ -328,6 +328,8 @@ class UnifiedUEMCore:
 
         # Logger Integration (Phase E)
         self.log_integration = None
+        self._run_id: Optional[str] = None
+        self._logging_active: bool = False
         if LOGGER_INTEGRATION_AVAILABLE:
             self.log_integration = CoreLoggerIntegration(enabled=True)
             self.logger.debug("[UnifiedCore] LoggerIntegration loaded")
@@ -421,6 +423,28 @@ class UnifiedUEMCore:
             self.logger.debug("[UnifiedCore] MetaMind modules loaded")
         
         self.logger.info("[UnifiedCore] Initialized successfully")
+    
+    # ========================================================================
+    # LOGGING CONTROL
+    # ========================================================================
+    
+    async def start_logging(self, run_config: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        """Start DB logging for this session."""
+        if self.log_integration is None:
+            return None
+        
+        self._run_id = await self.log_integration.start(run_config)
+        self._logging_active = self._run_id is not None
+        if self._logging_active:
+            self.logger.info(f"[UnifiedCore] DB logging started: {self._run_id}")
+        return self._run_id
+    
+    async def stop_logging(self, summary: Optional[Dict[str, Any]] = None) -> None:
+        """Stop DB logging."""
+        if self.log_integration and self._logging_active:
+            await self.log_integration.stop(summary)
+            self.logger.info(f"[UnifiedCore] DB logging stopped: {self._run_id}")
+            self._logging_active = False
     
     # ========================================================================
     # INITIALIZATION
@@ -773,12 +797,40 @@ class UnifiedUEMCore:
             t0 = time.perf_counter()
             action_result = await self._phase_execution(action_plan)
             
-            # Logger Integration: cycle end (fire and forget)
-            if self.log_integration:
+            # Logger Integration: cycle end + DB write
+            if self.log_integration and self._logging_active:
                 try:
+                    # Write PreData event to DB
+                    await self.log_integration.logger.log_event(
+                        run_id=self._run_id,
+                        cycle_id=self.tick,
+                        module_name="predata",
+                        event_type="cycle_predata",
+                        payload=self._current_predata,
+                        emotion_valence=appraisal_result.valence if appraisal_result else None,
+                        action_name=action_plan.action if action_plan else None,
+                        ethmor_decision=self._current_predata.get('ethmor_decision'),
+                        success_flag_explicit=action_result.success,
+                        cycle_time_ms=sum(phase_times.values()),
+                        input_quality_score=self._current_predata.get('input_quality_score'),
+                        input_language=self._current_predata.get('input_language'),
+                        output_language=self._current_predata.get('output_language'),
+                    )
+                    
+                    # Write MetaMind summary to DB
+                    if self._metamind_summary:
+                        await self.log_integration.logger.log_event(
+                            run_id=self._run_id,
+                            cycle_id=self.tick,
+                            module_name="metamind",
+                            event_type="cycle_summary",
+                            payload=self._metamind_summary,
+                        )
+                    
+                    # End cycle in logger
                     await self.log_integration.on_cycle_end(success=action_result.success)
-                except Exception:
-                    pass  # Don't break cycle if logging fails
+                except Exception as e:
+                    self.logger.debug(f"[DBWrite] Error: {e}")
             phase_times["execution"] = (time.perf_counter() - t0) * 1000
             
             # Phase 9: LEARNING
