@@ -32,6 +32,7 @@ try:
     from core.emotion.predata_calculator import EmotionPreDataCalculator
     from core.planning.predata_calculator import PlannerPreDataCalculator
     from core.perception.predata_calculator import PerceptionPreDataCalculator
+    from core.predata.calculators import calculate_all_multiagent_fields
     from core.predata.module_calculators import (
         WorkspacePreDataCalculator,
         MemoryPreDataCalculator,
@@ -911,18 +912,31 @@ class UnifiedUEMCore:
                 except Exception:
                     pass
             
-            # Multi-Agent PreData
-            if MULTI_AGENT_AVAILABLE and self._ma_coordinator is not None:
-                try:
-                    ma_summary = self._ma_coordinator.get_summary()
-                    ma_predata = {
-                        'ma_agent_count': ma_summary.get('agent_count', 1),
-                        'ma_coordination_mode': ma_summary.get('mode', 'independent'),
-                        'ma_conflict_score': ma_summary.get('conflict_score', 0.0),
-                    }
-                    self._current_predata.update(ma_predata)
-                except Exception:
-                    pass
+            # Multi-Agent PreData (v1.0 - Real Calculations)
+            try:
+                # Get entities from perception if available
+                other_entities = getattr(perception_result, "entities", []) if perception_result else []
+                empathy_results = getattr(self, "_empathy_results", []) or []
+                
+                ma_fields = calculate_all_multiagent_fields(
+                    other_entities=other_entities,
+                    empathy_results=empathy_results,
+                    goal_overlap=0.0  # V1.0: placeholder
+                )
+                self._current_predata.update({
+                    "empathy_score": ma_fields["empathy_score"],
+                    "ma_agent_count": ma_fields["ma_agent_count"],
+                    "ma_coordination_mode": ma_fields["ma_coordination_mode"],
+                    "ma_conflict_score": ma_fields["ma_conflict_score"],
+                })
+            except Exception:
+                # Fallback to defaults
+                self._current_predata.update({
+                    "empathy_score": 0.0,
+                    "ma_agent_count": 1,
+                    "ma_coordination_mode": "single",
+                    "ma_conflict_score": 0.0,
+                })
             
             # === MetaMind Analysis ===
             if METAMIND_AVAILABLE and self._coherence_scorer is not None:
