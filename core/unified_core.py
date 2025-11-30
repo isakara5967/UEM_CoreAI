@@ -915,7 +915,7 @@ class UnifiedUEMCore:
             # Multi-Agent PreData (v1.0 - Real Calculations)
             try:
                 # Get entities from perception if available
-                other_entities = getattr(perception_result, "entities", []) if perception_result else []
+                other_entities = getattr(world_state, "agents", []) or []
                 empathy_results = getattr(self, "_empathy_results", []) or []
                 
                 ma_fields = calculate_all_multiagent_fields(
@@ -1030,9 +1030,6 @@ class UnifiedUEMCore:
             flag_penalty = len([f for f in flags if f != 'clean']) * 0.1
             input_quality_score = max(0.0, min(1.0, (1.0 - noise) * trust - flag_penalty))
             self._current_predata['input_quality_score'] = round(input_quality_score, 3)
-            
-            # 6. empathy_score (placeholder - 0.5 default, will be computed by empathy module)
-            self._current_predata['empathy_score'] = getattr(self, '_last_empathy_score', 0.5)
             
             phase_times["learning"] = (time.perf_counter() - t0) * 1000
             

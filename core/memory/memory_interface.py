@@ -111,7 +111,7 @@ class MemoryInterface:
             stored_event = StoredEvent(
                 source=event_dict.get('source', 'unknown'),
                 target=event_dict.get('target', 'unknown'),
-                effect=self._ensure_vector8(event_dict.get('effect', (0,0,0))),
+                effect=self._ensure_vector16(event_dict.get('effect', (0,0,0))),
                 tick=event_dict.get('tick', 0),
                 salience=event_dict.get('salience', 0.5),
                 category=event_dict.get('category', 'WORLD'),
@@ -143,7 +143,7 @@ class MemoryInterface:
             
             # Convert to StoredSnapshot
             stored_snapshot = StoredSnapshot(
-                state_vector=self._ensure_vector8(snapshot_dict.get('state_vector', (0.5, 0, 0.5))),
+                state_vector=self._ensure_vector16(snapshot_dict.get('state_vector', (0.5, 0, 0.5))),
                 tick=snapshot_dict.get('tick', 0),
                 salience=snapshot_dict.get('salience', 0.5),
                 goals=snapshot_dict.get('goals', []),
@@ -217,7 +217,7 @@ class MemoryInterface:
             List of similar experience dicts with similarity scores
         """
         try:
-            vector8 = self._ensure_vector8(state_vector)
+            vector8 = self._ensure_vector16(state_vector)
             
             similar_snapshots = self._storage.get_similar_experiences(
                 state_vector=vector8,
@@ -246,11 +246,18 @@ class MemoryInterface:
     # INTERNAL HELPERS
     # ========================================================================
 
+    def _ensure_vector16(self, vec: tuple) -> tuple:
+        """Ensure vector has 16 dimensions (pad with zeros if needed)."""
+        if vec is None:
+            vec = ()
+        if len(vec) >= 16:
+            return tuple(vec[:16])
+        return tuple(vec) + (0.0,) * (16 - len(vec))
+    
+    # Backward compatibility alias
     def _ensure_vector8(self, vec: tuple) -> tuple:
-        """Ensure vector has 8 dimensions (pad with zeros if needed)."""
-        if len(vec) >= 8:
-            return tuple(vec[:8])
-        return tuple(vec) + (0.0,) * (8 - len(vec))
+        """Deprecated: Use _ensure_vector16. Kept for compatibility."""
+        return self._ensure_vector16(vec)
 
     def _event_to_dict(self, event: Any) -> Dict[str, Any]:
         """Convert Event object to dict."""

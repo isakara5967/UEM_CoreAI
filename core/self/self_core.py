@@ -42,7 +42,7 @@ try:
     ONTOLOGY_AVAILABLE = True
 except ImportError:
     # Ontology henüz yoksa, tipler opsiyonel olsun
-    StateVector = Tuple[float, float, float]  # type: ignore
+    StateVector = Tuple[float, ...]  # 16D state vector
     StateDelta = Tuple[float, float, float]   # type: ignore
     ONTOLOGY_AVAILABLE = False
 

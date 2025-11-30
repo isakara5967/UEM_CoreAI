@@ -524,7 +524,8 @@ class PlannerV2:
         elif context.state_vector:
             # state_vector = (resource, threat, wellbeing)
             threat = context.state_vector[1]
-            health = context.state_vector[2]  # Use wellbeing as health proxy
+            # 16D format: health at [3], fallback to [0] for legacy
+            health = context.state_vector[3] if len(context.state_vector) > 3 else context.state_vector[0] if context.state_vector else 0.5
         
         # Effective risk = 0.6 * threat + 0.4 * (1 - health)
         effective_risk = (0.6 * threat) + (0.4 * (1 - health))

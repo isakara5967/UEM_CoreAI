@@ -205,8 +205,14 @@ class EmotionCore:
         elif isinstance(world_snapshot, dict):
             danger = world_snapshot.get('danger_level', 0.0)
         
-        # Health from state_vector
-        health = state_vector[0] if state_vector else 0.5
+        # Health from world_snapshot (not state_vector[0] which is resource)
+        health = 0.5
+        if hasattr(world_snapshot, 'player_health'):
+            health = world_snapshot.player_health
+        elif isinstance(world_snapshot, dict):
+            health = world_snapshot.get('player_health', 0.5)
+        elif state_vector and len(state_vector) > 3:
+            health = state_vector[3]  # 16D format: health at [3]
         
         # Energy (NEW in v1.5)
         energy = 1.0

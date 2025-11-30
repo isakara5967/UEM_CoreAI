@@ -8,7 +8,7 @@ import math
 
 # ---- Primitive Types ------------------------------------------------------
 
-StateVector = Tuple[float, float, float]   # (resource, threat, wellbeing)
+StateVector = Tuple[float, ...]   # 16D: (resource, threat, wellbeing, health, energy, valence, arousal, dominance, reserved...)
 StateDelta = Tuple[float, float, float]
 
 
@@ -67,11 +67,38 @@ class EthmorLike(Protocol):
 
 
 def build_state_vector(world: WorldStateLike, emotion: EmotionCoreLike) -> StateVector:
-    """Compute (RESOURCE_LEVEL, THREAT_LEVEL, WELLBEING) from modules."""
-    resource = max(0.0, min(1.0, (world.player_health + world.player_energy) / 2.0))
-    threat = max(0.0, min(1.0, world.danger_level))
-    wellbeing = max(0.0, min(1.0, (emotion.valence + 1.0) / 2.0))
-    return (resource, threat, wellbeing)
+    """Compute 16D state vector from modules.
+    
+    Structure:
+        [0] resource   - (health + energy) / 2
+        [1] threat     - danger_level  
+        [2] wellbeing  - (valence + 1) / 2
+        [3] health     - player_health (raw)
+        [4] energy     - player_energy (raw)
+        [5] valence    - emotion.valence (raw)
+        [6] arousal    - emotion.arousal (raw)
+        [7] dominance  - emotion.dominance (raw)
+        [8-15] reserved
+    """
+    # Raw values
+    health = getattr(world, 'player_health', 0.5)
+    energy = getattr(world, 'player_energy', 0.5)
+    danger = getattr(world, 'danger_level', 0.0)
+    valence = getattr(emotion, 'valence', 0.0)
+    arousal = getattr(emotion, 'arousal', 0.0)
+    dominance = getattr(emotion, 'dominance', 0.0)
+    
+    # Derived values
+    resource = max(0.0, min(1.0, (health + energy) / 2.0))
+    threat = max(0.0, min(1.0, danger))
+    wellbeing = max(0.0, min(1.0, (valence + 1.0) / 2.0))
+    
+    return (
+        resource, threat, wellbeing,           # [0-2] derived
+        health, energy, valence,               # [3-5] raw
+        arousal, dominance,                    # [6-7] raw
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # [8-15] reserved
+    )
 
 
 def compute_state_delta(before: StateVector, after: StateVector) -> StateDelta:
