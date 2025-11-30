@@ -574,6 +574,16 @@ class UnifiedUEMCore:
                 planning_predata = self._planner_predata.get_predata()
                 self._current_predata.update(planning_predata)
             
+            # PreData: ETHMOR (from action_plan metadata)
+            ethmor_predata = {
+                'ethmor_decision': getattr(action_plan, 'ethmor_decision', 'ALLOW'),
+                'triggered_rules': getattr(action_plan, 'triggered_rules', []),
+                'risk_level': getattr(action_plan, 'risk_level', 0.0),
+                'intervention_type': getattr(action_plan, 'intervention_type', None),
+                'ethical_confidence': getattr(action_plan, 'ethical_confidence', 1.0),
+            }
+            self._current_predata.update(ethmor_predata)
+            
             # Logger Integration: planning
             if self.log_integration:
                 self.log_integration.on_planning(
@@ -581,6 +591,13 @@ class UnifiedUEMCore:
                     utility=action_plan.utility,
                     candidates=planning_predata.get('candidate_plans'),
                     utility_breakdown=planning_predata.get('utility_breakdown'),
+                )
+                # Logger Integration: ethmor
+                self.log_integration.on_ethmor(
+                    decision=ethmor_predata['ethmor_decision'],
+                    triggered_rules=ethmor_predata['triggered_rules'],
+                    risk_level=ethmor_predata['risk_level'],
+                    ethical_confidence=ethmor_predata['ethical_confidence'],
                 )
             phase_times["planning"] = (time.perf_counter() - t0) * 1000
             
@@ -606,6 +623,11 @@ class UnifiedUEMCore:
                     success=action_result.success,
                     prediction_error=abs(action_result.outcome_valence - action_plan.utility) if action_plan else 0.0,
                 )
+            
+            # PreData: ltm_write_count (memory stored in learning phase)
+            ltm_write_count = 1 if action_result.success else 0  # Simplified: 1 event per cycle
+            self._current_predata['ltm_write_count'] = ltm_write_count
+            
             phase_times["learning"] = (time.perf_counter() - t0) * 1000
             
         except Exception as e:
