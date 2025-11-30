@@ -3,11 +3,16 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+# Load .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 @dataclass
 class LoggerConfig:
     """Configuration for UEM Logger."""
-    
     # Database connection (from environment variables)
     host: str = field(default_factory=lambda: os.getenv("UEM_DB_HOST", "localhost"))
     port: int = field(default_factory=lambda: int(os.getenv("UEM_DB_PORT", "5432")))
