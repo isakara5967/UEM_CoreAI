@@ -69,10 +69,3 @@ class PerceptionResult:
     agents: List[PerceivedAgent]
     environment_state: EnvironmentState
     symbols: List[str] = field(default_factory=list)
-    
-    # === PreData Fields (v1.9) ===
-    novelty_score: Optional[float] = None
-    salience_map: Optional[Dict[str, Any]] = None
-    temporal_context: Optional[Dict[str, Any]] = None
-    attention_focus: Optional[str] = None
-    confidence: Optional[float] = None

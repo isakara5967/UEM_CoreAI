@@ -90,9 +90,6 @@ class EthmorEvaluationResult:
     decision: ActionDecision
     explanation: str
     hard_violation: bool = False
-    
-    # === PreData Fields (v1.9) ===
-    ethical_confidence: Optional[float] = None  # 0.0-1.0, confidence in decision
 
 
 @dataclass
