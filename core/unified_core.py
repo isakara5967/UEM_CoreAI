@@ -405,7 +405,8 @@ class UnifiedUEMCore:
         self._trust_aggregator = None
         self._failure_tracker = None
         self._action_analyzer = None
-        self._trend_analyzer = None
+        self._valence_trend = None
+        self._arousal_trend = None
         self._alert_manager = None
         self._behavior_clusterer = None
         self._metamind_summary: Dict[str, Any] = {}
@@ -417,7 +418,8 @@ class UnifiedUEMCore:
             self._trust_aggregator = TrustAggregator()
             self._failure_tracker = FailureTracker()
             self._action_analyzer = ActionAnalyzer()
-            self._trend_analyzer = TrendAnalyzer()
+            self._valence_trend = TrendAnalyzer()
+            self._arousal_trend = TrendAnalyzer()
             self._alert_manager = AlertManager()
             self._behavior_clusterer = BehaviorClusterer()
             self.logger.debug("[UnifiedCore] MetaMind modules loaded")
@@ -610,6 +612,14 @@ class UnifiedUEMCore:
         # Logger Integration: cycle start
         if self.log_integration:
             self.log_integration.on_cycle_start(tick=self.tick, cycle_id=self.tick)
+            # Start cycle in DB (required for foreign key)
+            if self._logging_active:
+                try:
+                    await self.log_integration.logger.start_cycle(
+                        self._run_id, cycle_id=self.tick, tick=self.tick
+                    )
+                except Exception:
+                    pass
         start = time.perf_counter()
         phase_times: Dict[str, float] = {}
         
@@ -644,13 +654,18 @@ class UnifiedUEMCore:
                     # Extract text for language detection
                     text_content = ' '.join(getattr(world_state, 'symbols', []) or [])
                     
+                    # Detect language (may return tuple or string)
+                    lang_result = self._language_detector.detect(text_content) if text_content else 'unknown'
+                    if isinstance(lang_result, tuple):
+                        lang_result = lang_result[0]  # Extract language code from tuple
+                    
                     # Compute Data Quality fields
                     dq_predata = {
                         'input_modality_mix': self._modality_detector.detect(input_data),
                         'input_noise_level': self._noise_estimator.estimate(input_data),
                         'source_trust_score': self._trust_scorer.score(input_data, source='world_state'),
                         'data_quality_flags': self._quality_flagger.check(input_data),
-                        'input_language': self._language_detector.detect(text_content) if text_content else 'unknown',
+                        'input_language': lang_result,
                     }
                     self._current_predata.update(dq_predata)
                 except Exception as e:
@@ -800,13 +815,32 @@ class UnifiedUEMCore:
             # Logger Integration: cycle end + DB write
             if self.log_integration and self._logging_active:
                 try:
-                    # Write PreData event to DB
+                    # Write PreData event to DB (serialize payload)
+                    import json
+                    def serialize_predata(obj):
+                        """Convert non-JSON-serializable objects."""
+                        if hasattr(obj, 'to_dict'):
+                            return obj.to_dict()
+                        elif hasattr(obj, '__dict__'):
+                            return obj.__dict__
+                        elif hasattr(obj, 'value'):
+                            return obj.value
+                        return str(obj)
+                    
+                    serializable_predata = {}
+                    for k, v in self._current_predata.items():
+                        try:
+                            json.dumps(v)
+                            serializable_predata[k] = v
+                        except (TypeError, ValueError):
+                            serializable_predata[k] = serialize_predata(v)
+                    
                     await self.log_integration.logger.log_event(
                         run_id=self._run_id,
                         cycle_id=self.tick,
                         module_name="predata",
                         event_type="cycle_predata",
-                        payload=self._current_predata,
+                        payload=serializable_predata,
                         emotion_valence=appraisal_result.valence if appraisal_result else None,
                         action_name=action_plan.action if action_plan else None,
                         ethmor_decision=self._current_predata.get('ethmor_decision'),
@@ -904,25 +938,23 @@ class UnifiedUEMCore:
                         **self._current_predata,
                     }
                     
-                    # Scoring
-                    coherence = self._coherence_scorer.score(cycle_data)
-                    efficiency = self._efficiency_scorer.score(cycle_data)
-                    quality = self._quality_scorer.score(cycle_data)
-                    trust = self._trust_aggregator.aggregate(cycle_data)
+                    # Scoring (use compute method)
+                    coherence = self._coherence_scorer.compute(cycle_data) if hasattr(self._coherence_scorer, 'compute') else 0.5
+                    efficiency = self._efficiency_scorer.compute(cycle_data) if hasattr(self._efficiency_scorer, 'compute') else 0.5
+                    quality = self._quality_scorer.compute(cycle_data) if hasattr(self._quality_scorer, 'compute') else 0.5
+                    trust = self._trust_aggregator.compute(cycle_data) if hasattr(self._trust_aggregator, 'compute') else 0.5
                     
                     # Pattern tracking
-                    self._failure_tracker.update(action_result.success if action_result else False)
+                    self._failure_tracker.record(action_result.success if action_result else False)
                     self._action_analyzer.record(action_plan.action if action_plan else 'none')
-                    self._trend_analyzer.add_point(
-                        appraisal_result.valence if appraisal_result else 0.0,
-                        appraisal_result.arousal if appraisal_result else 0.0,
-                    )
+                    self._valence_trend.add(appraisal_result.valence if appraisal_result else 0.0)
+                    self._arousal_trend.add(appraisal_result.arousal if appraisal_result else 0.0)
                     
                     # Get derived metrics
                     failure_streak = self._failure_tracker.current_streak
-                    action_diversity = self._action_analyzer.get_diversity()
-                    valence_trend = self._trend_analyzer.get_valence_trend()
-                    arousal_trend = self._trend_analyzer.get_arousal_trend()
+                    action_diversity = self._action_analyzer.get_diversity_score()
+                    valence_trend = self._valence_trend.get_trend_value()
+                    arousal_trend = self._arousal_trend.get_trend_value()
                     
                     # Clustering (every 10 cycles)
                     cluster_id = None
