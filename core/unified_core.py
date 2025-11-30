@@ -94,6 +94,23 @@ try:
 except ImportError:
     MULTI_AGENT_AVAILABLE = False
 
+# MetaMind modules (scoring, pattern, alerts)
+try:
+    from core.metamind.metrics import (
+        CoherenceScorer,
+        EfficiencyScorer,
+        QualityScorer,
+        TrustAggregator,
+        FailureTracker,
+        ActionAnalyzer,
+        TrendAnalyzer,
+        AlertManager,
+        BehaviorClusterer,
+    )
+    METAMIND_AVAILABLE = True
+except ImportError:
+    METAMIND_AVAILABLE = False
+
 import asyncio
 import logging
 import time
@@ -378,6 +395,31 @@ class UnifiedUEMCore:
         if MULTI_AGENT_AVAILABLE:
             self._ma_coordinator = MultiAgentCoordinator()
             self.logger.debug("[UnifiedCore] Multi-Agent coordinator loaded")
+        
+        # MetaMind (scoring, pattern, alerts)
+        self._coherence_scorer = None
+        self._efficiency_scorer = None
+        self._quality_scorer = None
+        self._trust_aggregator = None
+        self._failure_tracker = None
+        self._action_analyzer = None
+        self._trend_analyzer = None
+        self._alert_manager = None
+        self._behavior_clusterer = None
+        self._metamind_summary: Dict[str, Any] = {}
+        
+        if METAMIND_AVAILABLE:
+            self._coherence_scorer = CoherenceScorer()
+            self._efficiency_scorer = EfficiencyScorer()
+            self._quality_scorer = QualityScorer()
+            self._trust_aggregator = TrustAggregator()
+            self._failure_tracker = FailureTracker()
+            self._action_analyzer = ActionAnalyzer()
+            self._trend_analyzer = TrendAnalyzer()
+            self._alert_manager = AlertManager()
+            self._behavior_clusterer = BehaviorClusterer()
+            self.logger.debug("[UnifiedCore] MetaMind modules loaded")
+        
         self.logger.info("[UnifiedCore] Initialized successfully")
     
     # ========================================================================
@@ -795,6 +837,65 @@ class UnifiedUEMCore:
                     self._current_predata.update(ma_predata)
                 except Exception:
                     pass
+            
+            # === MetaMind Analysis ===
+            if METAMIND_AVAILABLE and self._coherence_scorer is not None:
+                try:
+                    # Prepare data for MetaMind
+                    cycle_data = {
+                        'valence': appraisal_result.valence if appraisal_result else 0.0,
+                        'arousal': appraisal_result.arousal if appraisal_result else 0.0,
+                        'action': action_plan.action if action_plan else None,
+                        'success': action_result.success if action_result else False,
+                        'utility': action_plan.utility if action_plan else 0.0,
+                        'cycle_time_ms': sum(phase_times.values()),
+                        **self._current_predata,
+                    }
+                    
+                    # Scoring
+                    coherence = self._coherence_scorer.score(cycle_data)
+                    efficiency = self._efficiency_scorer.score(cycle_data)
+                    quality = self._quality_scorer.score(cycle_data)
+                    trust = self._trust_aggregator.aggregate(cycle_data)
+                    
+                    # Pattern tracking
+                    self._failure_tracker.update(action_result.success if action_result else False)
+                    self._action_analyzer.record(action_plan.action if action_plan else 'none')
+                    self._trend_analyzer.add_point(
+                        appraisal_result.valence if appraisal_result else 0.0,
+                        appraisal_result.arousal if appraisal_result else 0.0,
+                    )
+                    
+                    # Get derived metrics
+                    failure_streak = self._failure_tracker.current_streak
+                    action_diversity = self._action_analyzer.get_diversity()
+                    valence_trend = self._trend_analyzer.get_valence_trend()
+                    arousal_trend = self._trend_analyzer.get_arousal_trend()
+                    
+                    # Clustering (every 10 cycles)
+                    cluster_id = None
+                    if self.tick % 10 == 0:
+                        cluster_id = self._behavior_clusterer.assign_cluster(cycle_data)
+                    
+                    # Alerts
+                    alerts = self._alert_manager.check(cycle_data, cycle_id=self.tick)
+                    
+                    # Store MetaMind summary
+                    self._metamind_summary = {
+                        'coherence_score': coherence,
+                        'efficiency_score': efficiency,
+                        'outcome_quality_score': quality,
+                        'trust_score_avg': trust,
+                        'failure_streak': failure_streak,
+                        'action_diversity_score': action_diversity,
+                        'valence_trend': valence_trend,
+                        'arousal_trend': arousal_trend,
+                        'behavior_cluster_id': cluster_id,
+                        'alert_count': len(alerts),
+                    }
+                    
+                except Exception as e:
+                    self.logger.debug(f"[MetaMind] Error: {e}")
             
             # === Remaining 6 PreData Fields ===
             
