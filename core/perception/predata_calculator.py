@@ -155,11 +155,11 @@ class PerceptionPreDataCalculator:
             salience['dangerous_objects'] = round(min(1.0, dangerous_count * 0.3), 4)
         
         # Agents (especially hostile)
-        hostile_agents = sum(1 for ag in agents if ag.get('relation') == 'hostile')
+        hostile_agents = sum(1 for ag in (agents or []) if ag.get('relation') == 'hostile')
         if hostile_agents > 0:
             salience['hostile_agents'] = round(min(1.0, hostile_agents * 0.4), 4)
         
-        friendly_agents = sum(1 for ag in agents if ag.get('relation') == 'friendly')
+        friendly_agents = sum(1 for ag in (agents or []) if ag.get('relation') == 'friendly')
         if friendly_agents > 0:
             salience['friendly_agents'] = round(min(1.0, friendly_agents * 0.2), 4)
         
@@ -199,7 +199,7 @@ class PerceptionPreDataCalculator:
         if danger_level > 0.7:
             return "DANGER"
         
-        hostile_agents = [ag for ag in agents if ag.get('relation') == 'hostile']
+        hostile_agents = [ag for ag in (agents or []) if ag.get('relation') == 'hostile']
         if hostile_agents:
             return f"HOSTILE_AGENT:{hostile_agents[0].get('id', 'unknown')}"
         

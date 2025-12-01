@@ -215,17 +215,17 @@ class TestMemoryVector16:
     
     def test_ensure_vector16_exists(self):
         """_ensure_vector16 metodu mevcut olmalı."""
-        from core.memory.memory_interface import EpisodicMemoryInterface
+        from core.memory.memory_interface import MemoryInterface
         
-        mem = EpisodicMemoryInterface.__new__(EpisodicMemoryInterface)
+        mem = MemoryInterface.__new__(MemoryInterface)
         
         assert hasattr(mem, '_ensure_vector16')
     
     def test_backward_compat_ensure_vector8(self):
         """_ensure_vector8 hâlâ çalışmalı (backward compat)."""
-        from core.memory.memory_interface import EpisodicMemoryInterface
+        from core.memory.memory_interface import MemoryInterface
         
-        mem = EpisodicMemoryInterface.__new__(EpisodicMemoryInterface)
+        mem = MemoryInterface.__new__(MemoryInterface)
         
         # _ensure_vector8 artık _ensure_vector16'yı çağırmalı
         assert hasattr(mem, '_ensure_vector8')

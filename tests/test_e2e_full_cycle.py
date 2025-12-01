@@ -270,7 +270,7 @@ class TestAsyncSyncConsistency:
         
         # Sync
         core_sync = create_unified_core(storage_type="memory")
-        result_sync = core_sync.cycle_sync(world)
+        result_sync = await core_sync.cycle(world)
         
         # Async
         core_async = create_unified_core(storage_type="memory")

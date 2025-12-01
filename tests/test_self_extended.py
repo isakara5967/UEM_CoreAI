@@ -95,7 +95,7 @@ class TestStateVectorTracking:
         
         state = self_core.get_state_vector()
         assert state is not None
-        assert len(state) == 3
+        assert len(state) == 16
         
         # RESOURCE_LEVEL = (0.8 + 0.6) / 2 = 0.7
         assert state[0] == pytest.approx(0.7, rel=0.01)

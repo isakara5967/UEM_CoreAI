@@ -57,7 +57,7 @@ class TestEmotionLabels:
         """Yüksek tehlike → fear."""
         world = E2EWorldState(
             danger_level=0.9,
-            player_health=0.6
+            player_health=0.3
         )
         
         core.cycle_sync(world)

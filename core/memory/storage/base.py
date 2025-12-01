@@ -1,6 +1,8 @@
 """
 BaseStorage - Abstract Storage Interface
 Tüm storage implementasyonları bu interface'i kullanır.
+
+Updated: 16D vectors, state_before/after for events
 """
 
 from abc import ABC, abstractmethod
@@ -10,39 +12,60 @@ from datetime import datetime
 import uuid
 
 
-# ============== Data Classes ==============
+STATE_VECTOR_SIZE = 16
+
+SV_RESOURCE = 0
+SV_THREAT = 1
+SV_WELLBEING = 2
+SV_HEALTH = 3
+SV_ENERGY = 4
+SV_VALENCE = 5
+SV_AROUSAL = 6
+SV_DOMINANCE = 7
+
+
+def _ensure_16d(vec: Tuple[float, ...]) -> Tuple[float, ...]:
+    if vec is None:
+        return (0.0,) * STATE_VECTOR_SIZE
+    if len(vec) >= STATE_VECTOR_SIZE:
+        return tuple(vec[:STATE_VECTOR_SIZE])
+    return tuple(vec) + (0.0,) * (STATE_VECTOR_SIZE - len(vec))
+
 
 @dataclass
 class StoredEvent:
-    """Veritabanına kaydedilen event yapısı."""
+    """Event for public.events - 16D vectors."""
     id: Optional[int] = None
-    agent_id: str = ""  # Storage tarafından atanacak
+    agent_id: str = ""
     session_id: Optional[str] = None
     timestamp: Optional[datetime] = None
     tick: int = 0
     category: str = "WORLD"
     source: str = ""
     target: str = ""
-    effect: Tuple[float, ...] = (0.0,) * 8
+    state_before: Tuple[float, ...] = (0.0,) * STATE_VECTOR_SIZE
+    effect: Tuple[float, ...] = (0.0,) * STATE_VECTOR_SIZE
+    state_after: Tuple[float, ...] = (0.0,) * STATE_VECTOR_SIZE
     salience: float = 0.5
-    emotion_valence: Optional[float] = None
-    emotion_arousal: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = datetime.now()
+        self.state_before = _ensure_16d(self.state_before)
+        self.effect = _ensure_16d(self.effect)
+        self.state_after = _ensure_16d(self.state_after)
 
 
 @dataclass 
 class StoredSnapshot:
-    """Veritabanına kaydedilen snapshot yapısı."""
+    """Snapshot for public.snapshots - 16D state_vector."""
     id: Optional[int] = None
-    agent_id: str = ""  # Storage tarafından atanacak
+    agent_id: str = ""
     session_id: Optional[str] = None
     timestamp: Optional[datetime] = None
     tick: int = 0
-    state_vector: Tuple[float, ...] = (0.0,) * 8
+    state_vector: Tuple[float, ...] = (0.0,) * STATE_VECTOR_SIZE
     consolidation_level: int = 0
     last_accessed: Optional[datetime] = None
     access_count: int = 0
@@ -56,26 +79,16 @@ class StoredSnapshot:
             self.timestamp = datetime.now()
         if self.last_accessed is None:
             self.last_accessed = self.timestamp
+        self.state_vector = _ensure_16d(self.state_vector)
 
-
-# ============== Abstract Base Class ==============
 
 class BaseStorage(ABC):
-    """
-    Abstract base class for all storage implementations.
-    """
-    
-    def __init__(self, agent_id: Optional[str] = None):
-        self._default_agent_id = agent_id or str(uuid.uuid4())
+    def __init__(self):
         self._stats = {
             'events_stored': 0,
             'snapshots_stored': 0,
-            'queries': 0
+            'queries': 0,
         }
-    
-    @property
-    def agent_id(self) -> str:
-        return self._default_agent_id
     
     @abstractmethod
     def store_event(self, event: StoredEvent) -> int:
@@ -94,14 +107,14 @@ class BaseStorage(ABC):
         pass
     
     @abstractmethod
-    def get_similar_experiences(
+    def find_similar_snapshots(
         self,
         state_vector: Tuple[float, ...],
         limit: int = 5,
-        tolerance: float = 0.3,
+        tolerance: float = 0.5,
         agent_id: Optional[str] = None,
-        allow_cross_agent: bool = False
-    ) -> List[StoredSnapshot]:
+        allow_cross_agent: bool = False,
+    ) -> List[Dict[str, Any]]:
         pass
     
     @abstractmethod
@@ -111,37 +124,25 @@ class BaseStorage(ABC):
     def get_stats(self) -> Dict[str, Any]:
         return self._stats.copy()
     
-    def reset_stats(self) -> None:
+    def clear(self) -> None:
         self._stats = {'events_stored': 0, 'snapshots_stored': 0, 'queries': 0}
-    
-    def health_check(self) -> bool:
-        return True
-    
-    def _resolve_agent_id(self, agent_id: Optional[str]) -> str:
-        return agent_id or self._default_agent_id
     
     @staticmethod
     def compute_distance(v1: Tuple[float, ...], v2: Tuple[float, ...]) -> float:
-        if len(v1) != len(v2):
-            raise ValueError(f"Vector length mismatch: {len(v1)} vs {len(v2)}")
+        v1 = _ensure_16d(v1)
+        v2 = _ensure_16d(v2)
         return sum((a - b) ** 2 for a, b in zip(v1, v2)) ** 0.5
-    
-    @staticmethod
-    def compute_similarity(v1: Tuple[float, ...], v2: Tuple[float, ...]) -> float:
-        distance = BaseStorage.compute_distance(v1, v2)
-        max_distance = len(v1) ** 0.5 * 2
-        return max(0.0, 1.0 - (distance / max_distance))
 
 
-def get_storage(storage_type: str = "memory", agent_id: Optional[str] = None, **kwargs) -> BaseStorage:
+def get_storage(storage_type: str = "memory", **kwargs) -> BaseStorage:
     if storage_type == "memory":
         from .memory_storage import MemoryStorage
-        return MemoryStorage(agent_id=agent_id, **kwargs)
+        return MemoryStorage(**kwargs)
     elif storage_type == "file":
         from .file_storage import FileStorage
-        return FileStorage(agent_id=agent_id, **kwargs)
+        return FileStorage(**kwargs)
     elif storage_type == "postgres":
         from .postgres_storage import PostgresStorage
-        return PostgresStorage(agent_id=agent_id, **kwargs)
+        return PostgresStorage(**kwargs)
     else:
         raise ValueError(f"Unknown storage type: {storage_type}")

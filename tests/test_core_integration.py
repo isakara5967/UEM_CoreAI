@@ -157,7 +157,7 @@ class TestCognitiveCycle:
         
         state = uem_core.self_system.get_state_vector()
         assert state is not None
-        assert len(state) == 3
+        assert len(state) == 16
     
     @pytest.mark.asyncio
     async def test_cycle_logs_event(self, uem_core, world_state_safe):

@@ -101,7 +101,7 @@ class TestStateVector:
         
         state = build_state_vector(world, emotion)
         
-        assert len(state) == 3
+        assert len(state) == 16
         assert state[0] == 1.0  # RESOURCE_LEVEL = (1+1)/2
         assert state[1] == 0.0  # THREAT_LEVEL = 0
         assert state[2] == 0.5  # WELLBEING = (0+1)/2

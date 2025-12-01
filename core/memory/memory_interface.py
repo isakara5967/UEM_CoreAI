@@ -115,8 +115,8 @@ class MemoryInterface:
                 tick=event_dict.get('tick', 0),
                 salience=event_dict.get('salience', 0.5),
                 category=event_dict.get('category', 'WORLD'),
-                emotion_valence=event_dict.get('emotion_valence'),
-                emotion_arousal=event_dict.get('emotion_arousal'),
+                state_before=self._ensure_vector16(event_dict.get('state_before', (0,)*16)),
+                state_after=self._ensure_vector16(event_dict.get('state_after', (0,)*16)),
                 metadata=event_dict.get('metadata', {}),
             )
             
