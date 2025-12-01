@@ -1,11 +1,69 @@
 -- ============================================================
 -- UEM_CoreAI PreData + Log System DDL
--- Version: 1.0 (v12 Final Consensus)
--- Phase A - Step 2: Table Creation (10 Tables)
+-- Version: 2.0 (v5 - 16D StateVector Update - 1 Aralık 2025)
+-- Phase A - Step 2: Table Creation
 -- ============================================================
 
+-- ############################################################
+-- PUBLIC SCHEMA - MEMORY STORAGE (16D Vectors)
+-- ############################################################
+
 -- ============================================================
--- TABLO 1: core.experiments
+-- PUBLIC TABLO 1: public.events (Episodic Memory - 16D)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.events (
+    id              BIGSERIAL PRIMARY KEY,
+    agent_id        UUID NOT NULL,
+    session_id      UUID,
+    timestamp       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    tick            BIGINT NOT NULL DEFAULT 0,
+    category        VARCHAR(20) DEFAULT 'WORLD',
+    source          VARCHAR(50) NOT NULL,
+    target          VARCHAR(50) NOT NULL,
+    -- 16D Vector kolonları (v5)
+    state_before    vector(16),              -- Cycle başı state
+    effect          vector(16) NOT NULL,     -- Aksiyon etkisi
+    state_after     vector(16),              -- Cycle sonu state
+    -- Meta
+    salience        REAL DEFAULT 0.5,
+    metadata        JSONB DEFAULT '{}'
+);
+
+COMMENT ON TABLE public.events IS 'Episodic Memory - Her event için state_before, effect, state_after (16D vectors)';
+COMMENT ON COLUMN public.events.state_before IS '16D: [resource, threat, wellbeing, health, energy, valence, arousal, dominance, reserved×8]';
+COMMENT ON COLUMN public.events.effect IS '16D: Aksiyon etkisi (delta)';
+COMMENT ON COLUMN public.events.state_after IS '16D: state_before + effect = state_after';
+
+-- ============================================================
+-- PUBLIC TABLO 2: public.snapshots (State Snapshots - 16D)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.snapshots (
+    id                  BIGSERIAL PRIMARY KEY,
+    agent_id            UUID NOT NULL,
+    session_id          UUID,
+    timestamp           TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    tick                BIGINT NOT NULL DEFAULT 0,
+    -- 16D State vector
+    state_vector        vector(16) NOT NULL,
+    -- Memory properties
+    consolidation_level INTEGER DEFAULT 0,
+    last_accessed       TIMESTAMPTZ DEFAULT NOW(),
+    access_count        INTEGER DEFAULT 0,
+    strength            REAL DEFAULT 1.0,
+    salience            REAL DEFAULT 0.5,
+    goals               JSONB DEFAULT '[]',
+    metadata            JSONB DEFAULT '{}'
+);
+
+COMMENT ON TABLE public.snapshots IS 'State Snapshots - 16D state_vector ile similarity search';
+COMMENT ON COLUMN public.snapshots.state_vector IS '16D: [resource, threat, wellbeing, health, energy, valence, arousal, dominance, reserved×8]';
+
+-- ############################################################
+-- CORE SCHEMA - LOGGER/ANALYTICS
+-- ############################################################
+
+-- ============================================================
+-- CORE TABLO 1: core.experiments
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.experiments (
     experiment_id   TEXT PRIMARY KEY,
@@ -26,7 +84,7 @@ CREATE TABLE IF NOT EXISTS core.experiments (
 COMMENT ON TABLE core.experiments IS 'Deney tanımları ve A/B test yönetimi';
 
 -- ============================================================
--- TABLO 2: core.config_snapshots
+-- CORE TABLO 2: core.config_snapshots
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.config_snapshots (
     config_id       TEXT PRIMARY KEY,
@@ -43,7 +101,7 @@ CREATE TABLE IF NOT EXISTS core.config_snapshots (
 COMMENT ON TABLE core.config_snapshots IS 'Konfigürasyon geçmişi - reproducibility için';
 
 -- ============================================================
--- TABLO 3: core.modules (Referans)
+-- CORE TABLO 3: core.modules (Referans)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.modules (
     module_id       SERIAL PRIMARY KEY,
@@ -54,8 +112,21 @@ CREATE TABLE IF NOT EXISTS core.modules (
 
 COMMENT ON TABLE core.modules IS 'UEM modül tanımları';
 
+-- Seed data
+INSERT INTO core.modules (name, description) VALUES
+    ('perception', 'Algı modülü'),
+    ('emotion', 'Duygu modülü'),
+    ('memory', 'Hafıza modülü'),
+    ('self', 'Benlik modülü'),
+    ('workspace', 'Çalışma alanı modülü'),
+    ('planner', 'Planlama modülü'),
+    ('ethmor', 'Etik karar modülü'),
+    ('empathy', 'Empati modülü'),
+    ('execution', 'Yürütme modülü')
+ON CONFLICT (name) DO NOTHING;
+
 -- ============================================================
--- TABLO 4: core.submodules (Referans)
+-- CORE TABLO 4: core.submodules (Referans)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.submodules (
     submodule_id    SERIAL PRIMARY KEY,
@@ -68,7 +139,7 @@ CREATE TABLE IF NOT EXISTS core.submodules (
 COMMENT ON TABLE core.submodules IS 'Alt modül tanımları';
 
 -- ============================================================
--- TABLO 5: core.runs
+-- CORE TABLO 5: core.runs
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.runs (
     run_id          TEXT PRIMARY KEY,
@@ -88,7 +159,7 @@ CREATE TABLE IF NOT EXISTS core.runs (
 COMMENT ON TABLE core.runs IS 'Her UEM çalıştırma oturumu';
 
 -- ============================================================
--- TABLO 6: core.cycles
+-- CORE TABLO 6: core.cycles
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.cycles (
     id              BIGSERIAL,
@@ -106,7 +177,10 @@ CREATE TABLE IF NOT EXISTS core.cycles (
 COMMENT ON TABLE core.cycles IS 'Her cognitive cycle kaydı';
 
 -- ============================================================
--- TABLO 7: core.events (EN BÜYÜK TABLO)
+-- CORE TABLO 7: core.events (Logger - Analytics)
+-- NOT: Bu tablo public.events'ten FARKLIDIR!
+-- public.events = Memory Storage (16D vectors)
+-- core.events = Logger/Analytics (PreData payload)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.events (
     id              BIGSERIAL PRIMARY KEY,
@@ -117,23 +191,23 @@ CREATE TABLE IF NOT EXISTS core.events (
     event_type      TEXT NOT NULL,
     timestamp       TIMESTAMPTZ DEFAULT NOW(),
     payload         JSONB,
-    -- Denormalize kolonlar (9)
-    emotion_valence         FLOAT,
+    -- Denormalized kolonlar (hızlı query için)
+    emotion_valence         REAL,
     action_name             TEXT,
     ethmor_decision         TEXT,
     success_flag_explicit   BOOLEAN,
-    cycle_time_ms           FLOAT,
+    cycle_time_ms           REAL,
     module_name             TEXT,
-    input_quality_score     FLOAT,
+    input_quality_score     REAL,
     input_language          TEXT,
     output_language         TEXT,
     FOREIGN KEY (run_id, cycle_id) REFERENCES core.cycles(run_id, cycle_id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE core.events IS 'Tüm modül eventleri - en yüksek hacimli tablo';
+COMMENT ON TABLE core.events IS 'Tüm modül eventleri - PreData payload içerir (Logger/Analytics)';
 
 -- ============================================================
--- TABLO 8: core.metamind_cycle_summary
+-- CORE TABLO 8: core.metamind_cycle_summary
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.metamind_cycle_summary (
     id              BIGSERIAL PRIMARY KEY,
@@ -141,76 +215,66 @@ CREATE TABLE IF NOT EXISTS core.metamind_cycle_summary (
     cycle_id        INT NOT NULL,
     calculated_at   TIMESTAMPTZ DEFAULT NOW(),
     -- 19 MetaMind Kolonu
-    coherence_score         FLOAT,
-    efficiency_score        FLOAT,
-    outcome_quality_score   FLOAT,
-    decision_confidence_avg FLOAT,
-    ethmor_block_rate       FLOAT,
+    coherence_score         REAL,
+    efficiency_score        REAL,
+    outcome_quality_score   REAL,
+    decision_confidence_avg REAL,
+    ethmor_block_rate       REAL,
     dominant_emotion        TEXT,
-    emotion_stability       FLOAT,
+    emotion_stability       REAL,
     valence_trend           TEXT CHECK (valence_trend IN ('rising', 'falling', 'stable', 'volatile')),
     arousal_trend           TEXT CHECK (arousal_trend IN ('rising', 'falling', 'stable', 'volatile')),
     failure_streak          INT DEFAULT 0,
     recovery_attempts       INT DEFAULT 0,
-    action_diversity_score  FLOAT,
+    action_diversity_score  REAL,
     repeated_action_flag    BOOLEAN DEFAULT false,
-    cross_module_latency_ms FLOAT,
-    trust_score_avg         FLOAT,
-    quality_score_avg       FLOAT,
+    cross_module_latency_ms REAL,
+    trust_score_avg         REAL,
+    quality_score_avg       REAL,
     anomaly_flags           TEXT[],
     behavior_cluster_id     TEXT,
     meta_notes              JSONB,
     FOREIGN KEY (run_id, cycle_id) REFERENCES core.cycles(run_id, cycle_id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE core.metamind_cycle_summary IS 'MetaMind tarafından hesaplanan cycle özet metrikleri';
+COMMENT ON TABLE core.metamind_cycle_summary IS 'MetaMind üst-bilişsel analiz özeti';
 
 -- ============================================================
--- TABLO 9: core.alerts
+-- CORE TABLO 9: core.alerts
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.alerts (
-    alert_id        TEXT PRIMARY KEY,
+    alert_id        BIGSERIAL PRIMARY KEY,
     run_id          TEXT REFERENCES core.runs(run_id),
     cycle_id        INT,
     created_ts      TIMESTAMPTZ DEFAULT NOW(),
-    alert_type      TEXT NOT NULL,
-    severity        TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'critical')),
-    category        TEXT,
-    message         TEXT NOT NULL,
+    severity        TEXT DEFAULT 'info'
+                    CHECK (severity IN ('info', 'warning', 'critical', 'emergency')),
+    category        TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    message         TEXT,
     context         JSONB,
-    threshold_value FLOAT,
-    actual_value    FLOAT,
-    acknowledged    BOOLEAN DEFAULT false,
-    acknowledged_by TEXT,
-    acknowledged_at TIMESTAMPTZ,
     resolved        BOOLEAN DEFAULT false,
-    resolved_at     TIMESTAMPTZ
+    resolved_at     TIMESTAMPTZ,
+    resolved_by     TEXT
 );
 
-COMMENT ON TABLE core.alerts IS 'MetaMind tarafından üretilen uyarılar';
+COMMENT ON TABLE core.alerts IS 'Sistem uyarıları ve anomali bildirimleri';
 
 -- ============================================================
--- TABLO 10: core.metric_registry
+-- CORE TABLO 10: core.metric_registry
 -- ============================================================
 CREATE TABLE IF NOT EXISTS core.metric_registry (
-    metric_id           TEXT PRIMARY KEY,
-    metric_group        TEXT NOT NULL,
-    display_name        TEXT NOT NULL,
-    description         TEXT NOT NULL,
-    value_type          TEXT NOT NULL CHECK (value_type IN ('float', 'int', 'text', 'enum', 'json', 'array', 'boolean')),
-    valid_range         JSONB,
-    unit                TEXT,
-    version             TEXT NOT NULL,
-    introduced_in       TEXT,
-    deprecated_in       TEXT,
-    owner_module        TEXT,
-    log_location        TEXT,
-    calculation_formula TEXT,
-    dependencies        TEXT[],
-    tags                TEXT[],
-    extra_metadata      JSONB,
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ DEFAULT NOW()
+    metric_id       TEXT PRIMARY KEY,
+    metric_group    TEXT NOT NULL,
+    display_name    TEXT NOT NULL,
+    description     TEXT,
+    value_type      TEXT NOT NULL CHECK (value_type IN ('int', 'float', 'text', 'json', 'bool')),
+    version         TEXT DEFAULT 'v1.0',
+    introduced_in   TEXT,
+    deprecated_in   TEXT,
+    owner_module    TEXT,
+    log_location    TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-COMMENT ON TABLE core.metric_registry IS 'Tüm metriklerin merkezi tanım kaydı';
+COMMENT ON TABLE core.metric_registry IS 'PreData metrik tanımları - 52 alan';
