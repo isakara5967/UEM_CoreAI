@@ -15,7 +15,7 @@ try:
 except ImportError:
     # Fallback definitions
     StateVector = Tuple[float, float, float]
-    StateDelta = Tuple[float, float, float]
+    StateDelta = Tuple[float, ...]  # 16D delta
     Goal = Any
 
 
@@ -95,7 +95,7 @@ class ActionResult:
     success: bool = True
     outcome_type: str = "neutral"
     outcome_valence: float = 0.0
-    actual_effect: StateDelta = (0.0, 0.0, 0.0)
+    actual_effect: StateDelta = (0.0,) * 16
     reasoning: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:

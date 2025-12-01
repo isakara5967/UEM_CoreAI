@@ -266,7 +266,7 @@ class MemoryInterface:
         return {
             'source': getattr(event, 'source', 'unknown'),
             'target': getattr(event, 'target', 'unknown'),
-            'effect': getattr(event, 'effect', (0, 0, 0)),
+            'effect': getattr(event, 'effect', (0.0,) * 16),
             'timestamp': getattr(event, 'timestamp', time.time()),
             'tick': getattr(event, 'tick', 0),
             'salience': getattr(event, 'salience', 0.5),

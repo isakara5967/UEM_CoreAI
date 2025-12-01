@@ -1041,7 +1041,7 @@ class UnifiedUEMCore:
                 success=False,
                 outcome_type="error_fallback",
                 outcome_valence=-0.1,
-                actual_effect=(0.0, 0.0, 0.0),
+                actual_effect=(0.0,) * 16,
                 reasoning=["error_fallback"],
             )
         
@@ -1181,7 +1181,7 @@ class UnifiedUEMCore:
         self.logger.debug(f"[Cycle {self.tick}] Phase: self")
         
         state_vector = (0.5, 0.5, 0.5)  # Default
-        state_delta = (0.0, 0.0, 0.0)
+        state_delta = (0.0,) * 16
         goals = []
         
         if self.self_core is not None:

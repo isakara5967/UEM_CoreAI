@@ -437,7 +437,7 @@ class PlannerV2:
     ) -> float:
         """Compute state improvement score (survival focused)."""
         effect = candidate.predicted_effect
-        resource_delta, threat_delta, wellbeing_delta = effect
+        resource_delta, threat_delta, wellbeing_delta = effect[0], effect[1], effect[2]
         
         # Survival: reduce threat, maintain resources, improve wellbeing
         score = (
@@ -737,7 +737,7 @@ class PlannerV2:
         return ActionPlan(
             action="wait",
             target=None,
-            predicted_effect=(0.0, 0.0, 0.0),
+            predicted_effect=(0.0,) * 16,
             confidence=0.3,
             utility=0.0,
             reasoning=[f"fallback:{reason}", "wait:observe_gather_info"],

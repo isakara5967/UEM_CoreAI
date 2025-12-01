@@ -9,7 +9,7 @@ import math
 # ---- Primitive Types ------------------------------------------------------
 
 StateVector = Tuple[float, ...]   # 16D: (resource, threat, wellbeing, health, energy, valence, arousal, dominance, reserved...)
-StateDelta = Tuple[float, float, float]
+StateDelta = Tuple[float, ...]  # 16D delta
 
 
 @dataclass

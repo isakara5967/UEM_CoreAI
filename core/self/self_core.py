@@ -410,7 +410,7 @@ class SelfCore:
             if self._state_delta is not None:
                 effect = self._state_delta
             else:
-                effect = (0.0, 0.0, 0.0)
+                effect = (0.0,) * 16
         
         if ONTOLOGY_AVAILABLE:
             from core.ontology.types import Event as OntologyEvent

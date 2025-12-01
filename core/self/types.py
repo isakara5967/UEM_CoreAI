@@ -37,7 +37,7 @@ class SelfEvalResult:
     """
     # Core fields
     state_vector: StateVector = (0.5, 0.0, 0.5)  # (RESOURCE, THREAT, WELLBEING)
-    state_delta: StateDelta = (0.0, 0.0, 0.0)
+    state_delta: StateDelta = (0.0,) * 16
     goals: List[Goal] = field(default_factory=list)
     
     # PreData fields (v1.9)

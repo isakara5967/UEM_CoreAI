@@ -567,7 +567,7 @@ class Planner:
         return ActionPlan(
             action="wait",
             target=None,
-            predicted_effect=(0.0, 0.0, 0.0),
+            predicted_effect=(0.0,) * 16,
             confidence=0.3,
             utility=0.0,
             reasoning=[f"fallback:{reason}", "wait:observe_gather_info"],

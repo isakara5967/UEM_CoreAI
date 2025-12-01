@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 
 # Type aliases
-StateVector = Tuple[float, float, float]   # (resource, threat, wellbeing)
+StateVector = Tuple[float, ...]   # 16D state vector
 StateDelta = Tuple[float, float, float]
 
 
@@ -24,7 +24,7 @@ class CandidateAction:
     """Intermediate representation during planning pipeline."""
     action: str                           # "flee", "help", etc.
     target: Optional[str] = None          # entity or location ID
-    predicted_effect: StateDelta = (0.0, 0.0, 0.0)
+    predicted_effect: StateDelta = (0.0,) * 16
     utility: float = 0.0
     reasoning: List[str] = field(default_factory=list)
     base_params: Dict[str, Any] = field(default_factory=dict)
@@ -45,7 +45,7 @@ class ActionPlan:
     """Final output of the planning pipeline."""
     action: str
     target: Optional[str] = None
-    predicted_effect: StateDelta = (0.0, 0.0, 0.0)
+    predicted_effect: StateDelta = (0.0,) * 16
     confidence: float = 0.5
     utility: float = 0.0
     reasoning: List[str] = field(default_factory=list)
@@ -71,7 +71,7 @@ class PlanningContext:
     """Input context for the planning pipeline."""
     
     # State
-    state_vector: StateVector = (0.5, 0.5, 0.5)
+    state_vector: StateVector = (0.5,) * 16
     
     # Goals
     goals: List[Any] = field(default_factory=list)
@@ -134,5 +134,7 @@ DEFAULT_ACTION_EFFECTS: Dict[str, StateDelta] = {
 
 
 def get_predicted_effect(action: str) -> StateDelta:
-    """Get default predicted effect for an action."""
-    return DEFAULT_ACTION_EFFECTS.get(action, (0.0, 0.0, 0.0))
+    """Get default predicted effect for an action. Returns 16D."""
+    effect_3d = DEFAULT_ACTION_EFFECTS.get(action, (0.0, 0.0, 0.0))
+    # Pad to 16D: first 3 are derived (resource, threat, wellbeing)
+    return effect_3d + (0.0,) * 13

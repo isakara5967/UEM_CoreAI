@@ -346,7 +346,7 @@ class TestPredictedEffects:
     
     def test_wait_is_neutral(self):
         effect = get_predicted_effect("wait")
-        assert effect == (0.0, 0.0, 0.0)
+        assert effect[:3] == (0.0, 0.0, 0.0) and len(effect) == 16
 
 
 # ============================================================================
