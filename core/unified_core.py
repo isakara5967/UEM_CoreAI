@@ -606,6 +606,15 @@ class UnifiedUEMCore:
             ActionResult with outcome
         """
         self.tick += 1
+        # Capture state_before at cycle start
+        self._state_before_cycle = None
+        if self.self_core is not None:
+            try:
+                self._state_before_cycle = self.self_core.get_state_vector()
+            except Exception:
+                self._state_before_cycle = (0.0,) * 16
+        else:
+            self._state_before_cycle = (0.0,) * 16
         
         # Reset PreData for new cycle
         self._current_predata = {}
@@ -1461,11 +1470,22 @@ class UnifiedUEMCore:
         # Store event in memory
         if self.memory is not None:
             try:
+                # Compute state_after from current self_state
+                state_after = self_state.state_vector if self_state else (0.0,) * 16
+                # Ensure 16D
+                state_before = self._state_before_cycle or (0.0,) * 16
+                if len(state_before) < 16:
+                    state_before = tuple(state_before) + (0.0,) * (16 - len(state_before))
+                if len(state_after) < 16:
+                    state_after = tuple(state_after) + (0.0,) * (16 - len(state_after))
+                
                 event = {
                     "source": "SELF",
                     "action": action_result.action_name,
                     "target": action_result.target or "WORLD",
+                    "state_before": state_before,
                     "effect": action_result.actual_effect,
+                    "state_after": state_after,
                     "tick": self.tick,
                 }
                 self.memory.store_event(event)
