@@ -241,6 +241,147 @@ class PostgresStorage(BaseStorage):
         if self._pool:
             self._run_sync(self._pool.close())
             self._pool = None
+    # ========================================================================
+    # LTM SUPPORT METHODS
+    # ========================================================================
+    
+    def update_snapshot(
+        self,
+        snapshot_id: int,
+        strength: Optional[float] = None,
+        access_count: Optional[int] = None,
+        last_accessed: Optional[datetime] = None,
+        consolidation_level: Optional[int] = None,
+    ) -> bool:
+        """Update snapshot fields (for decay/rehearse)"""
+        return self._run_sync(self._update_snapshot_async(
+            snapshot_id, strength, access_count, last_accessed, consolidation_level
+        ))
+    
+    async def _update_snapshot_async(
+        self,
+        snapshot_id: int,
+        strength: Optional[float],
+        access_count: Optional[int],
+        last_accessed: Optional[datetime],
+        consolidation_level: Optional[int],
+    ) -> bool:
+        pool = await self._get_pool()
+        
+        updates = []
+        params = []
+        param_idx = 1
+        
+        if strength is not None:
+            updates.append(f"strength = ${param_idx}")
+            params.append(strength)
+            param_idx += 1
+        
+        if access_count is not None:
+            updates.append(f"access_count = ${param_idx}")
+            params.append(access_count)
+            param_idx += 1
+        
+        if last_accessed is not None:
+            updates.append(f"last_accessed = ${param_idx}")
+            params.append(last_accessed)
+            param_idx += 1
+        
+        if consolidation_level is not None:
+            updates.append(f"consolidation_level = ${param_idx}")
+            params.append(consolidation_level)
+            param_idx += 1
+        
+        if not updates:
+            return False
+        
+        params.append(snapshot_id)
+        query = f"UPDATE snapshots SET {', '.join(updates)} WHERE id = ${param_idx}"
+        
+        async with pool.acquire() as conn:
+            result = await conn.execute(query, *params)
+            return result == "UPDATE 1"
+    
+    def delete_snapshots(
+        self,
+        agent_id: Optional[str] = None,
+        strength_lt: Optional[float] = None,
+        older_than: Optional[datetime] = None,
+    ) -> int:
+        """Delete snapshots matching criteria, return deleted count"""
+        return self._run_sync(self._delete_snapshots_async(agent_id, strength_lt, older_than))
+    
+    async def _delete_snapshots_async(
+        self,
+        agent_id: Optional[str],
+        strength_lt: Optional[float],
+        older_than: Optional[datetime],
+    ) -> int:
+        pool = await self._get_pool()
+        
+        conditions = []
+        params = []
+        param_idx = 1
+        
+        if agent_id:
+            conditions.append(f"agent_id = ${param_idx}::uuid")
+            params.append(agent_id)
+            param_idx += 1
+        
+        if strength_lt is not None:
+            conditions.append(f"strength < ${param_idx}")
+            params.append(strength_lt)
+            param_idx += 1
+        
+        if older_than is not None:
+            conditions.append(f"last_accessed < ${param_idx}")
+            params.append(older_than)
+            param_idx += 1
+        
+        if not conditions:
+            return 0
+        
+        query = f"DELETE FROM snapshots WHERE {' AND '.join(conditions)}"
+        
+        async with pool.acquire() as conn:
+            result = await conn.execute(query, *params)
+            return int(result.split()[-1])
+    
+    def get_snapshots_for_decay(
+        self,
+        agent_id: Optional[str] = None,
+        min_age_seconds: float = 3600,
+    ) -> List[StoredSnapshot]:
+        """Get snapshots that need decay applied"""
+        return self._run_sync(self._get_snapshots_for_decay_async(agent_id, min_age_seconds))
+    
+    async def _get_snapshots_for_decay_async(
+        self,
+        agent_id: Optional[str],
+        min_age_seconds: float,
+    ) -> List[StoredSnapshot]:
+        pool = await self._get_pool()
+        
+        async with pool.acquire() as conn:
+            if agent_id:
+                rows = await conn.fetch("""
+                    SELECT * FROM snapshots 
+                    WHERE agent_id = $1::uuid 
+                    AND last_accessed < NOW() - INTERVAL '1 second' * $2
+                    AND strength > 0.01
+                    ORDER BY last_accessed ASC
+                """, agent_id, min_age_seconds)
+            else:
+                rows = await conn.fetch("""
+                    SELECT * FROM snapshots 
+                    WHERE last_accessed < NOW() - INTERVAL '1 second' * $1
+                    AND strength > 0.01
+                    ORDER BY last_accessed ASC
+                """, min_age_seconds)
+            
+            return [self._row_to_snapshot(r) for r in rows]
+
+
     
     def _parse_vec(self, v):
         if v is None:
