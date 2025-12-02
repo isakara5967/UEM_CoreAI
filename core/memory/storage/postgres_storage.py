@@ -30,6 +30,8 @@ class PostgresStorage(BaseStorage):
         database_url: Optional[str] = None,
         pool_size: int = 5,
         default_agent_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        **kwargs,
     ):
         super().__init__()
         if asyncpg is None:
@@ -40,7 +42,7 @@ class PostgresStorage(BaseStorage):
         )
         self._pool_size = pool_size
         self._pool = None
-        self._default_agent_id = default_agent_id or "00000000-0000-0000-0000-000000000001"
+        self._default_agent_id = agent_id or default_agent_id or "00000000-0000-0000-0000-000000000001"
         self._loop = None
     
     def _get_loop(self):
