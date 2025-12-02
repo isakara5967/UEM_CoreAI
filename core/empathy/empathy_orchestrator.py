@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+import hashlib
 from typing import Any, Dict, List, Optional, Tuple
 
 # Type aliases
@@ -140,7 +141,12 @@ class EmpathyOrchestrator:
             'avg_empathy': 0.0,
             'avg_confidence': 0.0,
             'zero_experience_count': 0,
+            'batch_computations': 0,
+            'cache_hits': 0,
         }
+        
+        # Cycle-level cache (cleared each cycle)
+        self._cycle_cache: Dict[str, EmpathyResult] = {}
     
     # ========================================================================
     # MAIN COMPUTATION
@@ -323,7 +329,7 @@ class EmpathyOrchestrator:
         if not similar_experiences:
             return 0.0
         
-        max_experiences = self.config.get('max_similar_experiences', 10)
+        max_experiences = self.config.get('max_similar_experiences', 50)
         max_possible_weight = max_experiences * 1.0  # Max salience is 1.0
         
         confidence = weight_sum / max_possible_weight
@@ -352,7 +358,7 @@ class EmpathyOrchestrator:
             return []
         
         tolerance = self.config.get('similarity_tolerance', 0.3)
-        max_results = self.config.get('max_similar_experiences', 10)
+        max_results = self.config.get('max_similar_experiences', 50)
         
         try:
             experiences = self.memory_interface.get_similar_experiences(
@@ -381,6 +387,120 @@ class EmpathyOrchestrator:
         old_conf = self._stats['avg_confidence']
         self._stats['avg_confidence'] = old_conf + (confidence - old_conf) / n
     
+    # ========================================================================
+    # BATCH PROCESSING
+    # ========================================================================
+
+    def batch_compute(
+        self,
+        others: List[OtherEntity],
+        use_cache: bool = True,
+    ) -> List[EmpathyResult]:
+        """
+        Compute empathy for multiple entities efficiently.
+        
+        - No limit on batch size (AI is not human-limited)
+        - Uses cache to avoid redundant DB queries for similar states
+        - max_similar_experiences: 50 (configurable, 5x human)
+        
+        Args:
+            others: List of entities to compute empathy for
+            use_cache: Whether to use cycle cache
+            
+        Returns:
+            List of EmpathyResults in same order as input
+        """
+        if not others:
+            return []
+        
+        self._stats['batch_computations'] += 1
+        results = []
+        
+        # Collect unique states that need DB queries
+        states_to_query = {}  # state_hash -> state_vector
+        entity_state_map = {}  # entity_id -> state_hash
+        
+        for other in others:
+            state_hash = self._hash_state(other.state_vector)
+            entity_state_map[other.entity_id] = state_hash
+            
+            # Check cache first
+            if use_cache and state_hash in self._cycle_cache:
+                self._stats['cache_hits'] += 1
+                continue
+            
+            # Need to query this state
+            if state_hash not in states_to_query:
+                states_to_query[state_hash] = other.state_vector
+        
+        # Query all unique states (could be optimized to batch DB query in P2)
+        state_experiences = {}  # state_hash -> experiences
+        for state_hash, state_vector in states_to_query.items():
+            experiences = self._get_similar_experiences(state_vector)
+            state_experiences[state_hash] = experiences
+        
+        # Compute results for each entity
+        for other in others:
+            state_hash = entity_state_map[other.entity_id]
+            
+            # Check cache
+            if use_cache and state_hash in self._cycle_cache:
+                cached = self._cycle_cache[state_hash]
+                result = EmpathyResult(
+                    empathy_level=cached.empathy_level,
+                    resonance=self._compute_resonance(other.valence),
+                    confidence=cached.confidence,
+                    similar_memories=cached.similar_memories,
+                    other_entity=other,
+                )
+                results.append(result)
+                continue
+            
+            # Compute fresh
+            experiences = state_experiences.get(state_hash, [])
+            empathy_level, weight_sum = self._compute_empathy_level(experiences)
+            resonance = self._compute_resonance(other.valence)
+            confidence = self._compute_confidence(experiences, weight_sum)
+            
+            result = EmpathyResult(
+                empathy_level=empathy_level,
+                resonance=resonance,
+                confidence=confidence,
+                similar_memories=experiences,
+                other_entity=other,
+            )
+            
+            # Cache result
+            if use_cache:
+                self._cycle_cache[state_hash] = result
+            
+            self._stats['computations'] += 1
+            self._update_stats(empathy_level, confidence)
+            results.append(result)
+        
+        return results
+
+    def clear_cycle_cache(self) -> int:
+        """
+        Clear the cycle cache. Call at end of each cycle.
+        
+        Returns:
+            Number of cached items cleared
+        """
+        count = len(self._cycle_cache)
+        self._cycle_cache.clear()
+        return count
+
+    def _hash_state(self, state_vector: StateVector) -> str:
+        """Create hash for state vector (cache key)."""
+        # Round to 2 decimals - similar states share cache
+        rounded = tuple(round(v, 2) for v in state_vector)
+        return hashlib.md5(str(rounded).encode()).hexdigest()[:16]
+
+    # ========================================================================
+    # STATISTICS
+    # ========================================================================
+
     def get_stats(self) -> Dict[str, Any]:
         """Get orchestrator statistics."""
         return {
@@ -395,7 +515,12 @@ class EmpathyOrchestrator:
             'avg_empathy': 0.0,
             'avg_confidence': 0.0,
             'zero_experience_count': 0,
+            'batch_computations': 0,
+            'cache_hits': 0,
         }
+        
+        # Cycle-level cache (cleared each cycle)
+        self._cycle_cache: Dict[str, EmpathyResult] = {}
 
 
 # ============================================================================
