@@ -24,6 +24,14 @@ from core.memory.storage import (
     BaseStorage, MemoryStorage, StoredEvent, StoredSnapshot, get_storage
 )
 
+# LTM Manager (optional)
+try:
+    from core.memory.ltm_manager import LTMManager
+    LTM_AVAILABLE = True
+except ImportError:
+    LTM_AVAILABLE = False
+    LTMManager = None
+
 
 class MemoryInterface:
     """
@@ -82,6 +90,20 @@ class MemoryInterface:
         self._snapshot_buffer: List[Dict[str, Any]] = []
         self._max_buffer_size = self.config.get('max_buffer_size', 1000)
 
+        # LTM Manager
+        self._ltm_manager = None
+        if LTM_AVAILABLE and storage_type == "postgres":
+            self._ltm_manager = LTMManager(
+                storage=self._storage,
+                config=self.config.get('ltm', {}),
+            )
+            self.logger.debug("[MemoryInterface] LTMManager initialized")
+        
+        # Consolidation tracking
+        self._consolidation_interval = self.config.get('consolidation_interval', 50)  # Every 50 cycles
+        self._decay_interval = self.config.get('decay_interval', 100)  # Every 100 cycles
+        self._cycle_count = 0
+        
         # Statistics
         self._stats = {
             'events_stored': 0,
@@ -335,6 +357,78 @@ class MemoryInterface:
     def health_check(self) -> bool:
         """Check if storage is healthy."""
         return self._storage.health_check()
+
+    # ========================================================================
+    # LTM OPERATIONS
+    # ========================================================================
+
+    def trigger_consolidation(self) -> Dict[str, Any]:
+        """Trigger memory consolidation (STM → LTM)."""
+        if self._ltm_manager is None:
+            return {'status': 'skipped', 'reason': 'LTM not available'}
+        
+        # Get recent snapshots as candidates
+        candidates = self._storage.get_recent_snapshots(n=100)
+        stm_candidates = [s for s in candidates if s.consolidation_level == 0]
+        
+        if not stm_candidates:
+            return {'status': 'skipped', 'reason': 'no candidates'}
+        
+        result = self._ltm_manager.consolidate(stm_candidates)
+        return {
+            'status': 'done',
+            'consolidated': result.consolidated,
+            'rejected': result.rejected,
+        }
+
+    def trigger_decay(self) -> Dict[str, Any]:
+        """Trigger memory decay (Ebbinghaus forgetting curve)."""
+        if self._ltm_manager is None:
+            return {'status': 'skipped', 'reason': 'LTM not available'}
+        
+        result = self._ltm_manager.decay(min_age_seconds=3600)  # 1 hour old
+        
+        # Also forget very weak memories
+        forgotten = self._ltm_manager.forget(strength_threshold=0.01)
+        
+        return {
+            'status': 'done',
+            'decayed': result.processed,
+            'forgotten': result.forgotten + forgotten,
+        }
+
+    def on_cycle_end(self) -> None:
+        """Called at end of each cycle for periodic LTM operations."""
+        self._cycle_count += 1
+        
+        # Periodic consolidation
+        if self._cycle_count % self._consolidation_interval == 0:
+            self.trigger_consolidation()
+        
+        # Periodic decay
+        if self._cycle_count % self._decay_interval == 0:
+            self.trigger_decay()
+
+    def retrieve_from_ltm(
+        self,
+        state_vector: tuple,
+        limit: int = 5,
+        min_consolidation_level: int = 1,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve memories specifically from LTM (consolidated only)."""
+        if self._ltm_manager is None:
+            return []
+        
+        return self._ltm_manager.retrieve_similar(
+            state_vector=state_vector,
+            limit=limit,
+            min_consolidation_level=min_consolidation_level,
+        )
+
+    @property
+    def ltm_manager(self) -> Optional['LTMManager']:
+        """Access LTM manager if available."""
+        return self._ltm_manager
 
     def close(self) -> None:
         """Close storage connections."""
