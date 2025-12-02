@@ -1,9 +1,43 @@
+import hashlib
 """
 Main PreData collector - aggregates data from all sources.
 """
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
+
+# Schema versioning
+PREDATA_SCHEMA_VERSION = "1.0"
+PREDATA_SCHEMA_FIELDS = [
+    # Core Cognitive
+    'utility_breakdown', 'candidate_plans', 'somatic_bias',
+    'triggered_rules', 'risk_level', 'intervention_type', 'ethical_confidence',
+    'engagement', 'valence_delta', 'arousal_volatility', 'emotion_label', 'mood_baseline',
+    'novelty_score', 'salience_map', 'temporal_context', 'attention_focus', 'perception_confidence',
+    'coalition_strength', 'broadcast_content', 'competition_intensity', 'conscious_threshold',
+    'retrieval_count', 'memory_relevance', 'consolidation_flag',
+    'self_state_vector', 'goal_progress', 'introspection_depth',
+    # Data Quality
+    'input_modality_mix', 'input_noise_level', 'source_trust_score', 'data_quality_flags',
+    'input_language', 'output_language',
+    # Session
+    'session_stage', 'user_goal_clarity', 'interaction_mode', 'user_engagement_level',
+    'experiment_tag', 'ab_bucket',
+    # Tooling
+    'tool_usage_summary', 'environment_profile', 'policy_set_id', 'policy_conflict_score',
+    'adversarial_input_score',
+    # Multi-Agent
+    'ma_agent_count', 'ma_coordination_mode', 'ma_conflict_score',
+    # Execution
+    'action_name', 'action_success', 'cycle_time_ms', 'causal_factors',
+]
+
+def get_schema_hash() -> str:
+    """Generate hash from field list for version tracking."""
+    fields_str = ','.join(sorted(PREDATA_SCHEMA_FIELDS))
+    return hashlib.md5(fields_str.encode()).hexdigest()[:12]
+
+PREDATA_SCHEMA_HASH = get_schema_hash()
 
 
 @dataclass
@@ -16,6 +50,10 @@ class PreData:
     cycle_id: int
     tick: int
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    # Schema versioning
+    _schema_version: str = field(default_factory=lambda: PREDATA_SCHEMA_VERSION)
+    _schema_hash: str = field(default_factory=lambda: PREDATA_SCHEMA_HASH)
     
     # === CORE COGNITIVE (27 fields) ===
     # Planner
