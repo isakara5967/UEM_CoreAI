@@ -33,3 +33,10 @@ data/episodic/*
 !data/episodic/.gitkeep
 
 .env
+
+# Test artifacts
+benchmark_results.json
+comprehensive_test_results.json
+*.bak
+data/memory/
+benchmarks/
