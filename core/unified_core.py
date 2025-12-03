@@ -112,6 +112,19 @@ try:
 except ImportError:
     METAMIND_AVAILABLE = False
 
+# MetaMind v1.9 Core
+try:
+    from core.metamind import (
+        MetaMindCore,
+        MetaMindStorage,
+        create_metamind_core,
+        create_metrics_adapter,
+    )
+    METAMIND_V19_AVAILABLE = True
+except ImportError:
+    METAMIND_V19_AVAILABLE = False
+    MetaMindCore = None
+
 import asyncio
 import logging
 import time
@@ -424,6 +437,31 @@ class UnifiedUEMCore:
             self._alert_manager = AlertManager()
             self._behavior_clusterer = BehaviorClusterer()
             self.logger.debug("[UnifiedCore] MetaMind modules loaded")
+
+        # MetaMind v1.9 Core
+        self._metamind_core = None
+        self._metrics_adapter = None
+        if METAMIND_V19_AVAILABLE:
+            try:
+                if METAMIND_AVAILABLE:
+                    self._metrics_adapter = create_metrics_adapter(
+                        coherence_scorer=self._coherence_scorer,
+                        efficiency_scorer=self._efficiency_scorer,
+                        quality_scorer=self._quality_scorer,
+                        trust_aggregator=self._trust_aggregator,
+                        failure_tracker=self._failure_tracker,
+                        action_analyzer=self._action_analyzer,
+                        valence_trend=self._valence_trend,
+                        arousal_trend=self._arousal_trend,
+                        alert_manager=self._alert_manager,
+                        behavior_clusterer=self._behavior_clusterer,
+                    )
+                import os
+                cfg_path = "config/metamind.yaml" if os.path.exists("config/metamind.yaml") else None
+                self._metamind_core = create_metamind_core(config_path=cfg_path, metrics_adapter=self._metrics_adapter)
+                self.logger.debug("[UnifiedCore] MetaMind v1.9 loaded")
+            except Exception as e:
+                self.logger.warning(f"[UnifiedCore] MetaMind v1.9 init failed: {e}")
         
         self.logger.info("[UnifiedCore] Initialized successfully")
     
@@ -440,10 +478,29 @@ class UnifiedUEMCore:
         self._logging_active = self._run_id is not None
         if self._logging_active:
             self.logger.info(f"[UnifiedCore] DB logging started: {self._run_id}")
+
+        # Initialize MetaMind v1.9 for this run
+        if self._metamind_core and self._run_id:
+            try:
+                # Storage'ı bağla (logger'dan DB al)
+                if self.log_integration and self.log_integration.logger:
+                    storage = MetaMindStorage(db=self.log_integration.logger.db)
+                    self._metamind_core.set_storage(storage)
+                self._metamind_core.initialize(self._run_id)
+                self.logger.debug(f"[UnifiedCore] MetaMind v1.9 initialized for run: {self._run_id}")
+            except Exception as e:
+                self.logger.warning(f"[UnifiedCore] MetaMind v1.9 run init failed: {e}")
         return self._run_id
     
     async def stop_logging(self, summary: Optional[Dict[str, Any]] = None) -> None:
         """Stop DB logging."""
+        # Finalize MetaMind v1.9
+        if self._metamind_core:
+            try:
+                self._metamind_core.on_run_end_sync()
+                self.logger.debug("[UnifiedCore] MetaMind v1.9 run finalized")
+            except Exception as e:
+                self.logger.debug(f"[UnifiedCore] MetaMind v1.9 finalize failed: {e}")
         if self.log_integration and self._logging_active:
             await self.log_integration.stop(summary)
             self.logger.info(f"[UnifiedCore] DB logging stopped: {self._run_id}")
@@ -1003,6 +1060,31 @@ class UnifiedUEMCore:
                     
                 except Exception as e:
                     self.logger.debug(f"[MetaMind] Error: {e}")
+            
+            # === MetaMind v1.9 Cycle End ===
+            if self._metamind_core:
+                try:
+                    cycle_data_v19 = {
+                        "valence": appraisal_result.valence if appraisal_result else 0.0,
+                        "arousal": appraisal_result.arousal if appraisal_result else 0.0,
+                        "action": action_plan.action if action_plan else "none",
+                        "success": action_result.success if action_result else False,
+                        "coherence": self._metamind_summary.get("coherence_score", 0.5),
+                        "efficiency": self._metamind_summary.get("efficiency_score", 0.5),
+                        "quality": self._metamind_summary.get("outcome_quality_score", 0.5),
+                        "failure_streak": self._metamind_summary.get("failure_streak", 0),
+                        "cycle_time_ms": sum(phase_times.values()),
+                    }
+                    meta_state = self._metamind_core.on_cycle_end(
+                        cycle_id=self.tick,
+                        cycle_data=cycle_data_v19,
+                        action_result=action_result,
+                    )
+                    if meta_state:
+                        self._metamind_summary["meta_state"] = meta_state.to_summary_dict()
+                        self._metamind_summary["episode_id"] = self._metamind_core.episode_manager.get_current_episode_id()
+                except Exception as e:
+                    self.logger.debug(f"[MetaMind v1.9] Cycle end error: {e}")
             
             # === Remaining 6 PreData Fields ===
             

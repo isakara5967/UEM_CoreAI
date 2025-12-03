@@ -1,0 +1,138 @@
+# ============================================================
+# MetaMind v1.9 Configuration
+# ============================================================
+# ⚠️ KRİTİK: Bu dosya tek kaynak - hardcode YASAK
+# Episode window, scheduler, meta-state ayarları buradan okunur
+# ============================================================
+
+metamind:
+  version: "1.9.0"
+  
+  # ============================================================
+  # EPISODE CONFIGURATION
+  # ============================================================
+  episode:
+    # ⚠️ Alice notu: Bu değer kodda ASLA hardcode olmayacak
+    window_cycles: 100
+    
+    boundary_reasons:
+      - "time_window"      # Otomatik (window_cycles'a ulaşınca)
+      - "event_override"   # Manuel tetikleme (v2.0)
+      - "run_end"          # Run bitişi
+      - "goal_complete"    # Hedef tamamlandı (v2.0)
+  
+  # ============================================================
+  # SCHEDULER CONFIGURATION
+  # ============================================================
+  scheduler:
+    # Cycle path için maksimum ek süre (ms)
+    online_budget_ms: 2
+    
+    jobs:
+      # === ONLINE JOBS (cycle path içinde) ===
+      meta_state_update:
+        period_cycles: 1
+        mode: "online"
+        target_ms: 0.5
+        enabled: true
+      
+      anomaly_check:
+        period_cycles: 1
+        mode: "online"
+        target_ms: 0.5
+        enabled: true
+      
+      # === ONLINE ASYNC JOBS (cycle sonrası) ===
+      pattern_miner:
+        period_cycles: 10
+        mode: "online_async"
+        target_ms: 50
+        enabled: true
+      
+      episode_check:
+        period_cycles: 100
+        mode: "online_async"
+        target_ms: 20
+        enabled: true
+      
+      insight_generator:
+        period_cycles: 50
+        mode: "online_async"
+        target_ms: 100
+        enabled: true
+      
+      # === OFFLINE BATCH JOBS (v2.0) ===
+      deep_pattern_mining:
+        period_runs: 1
+        mode: "offline_batch"
+        enabled: false  # v2.0'da aktif olacak
+      
+      run_report:
+        period_runs: 1
+        mode: "offline_batch"
+        enabled: false  # v2.0'da aktif olacak
+  
+  # ============================================================
+  # META-STATE CONFIGURATION
+  # ============================================================
+  meta_state:
+    # Güncelleme aralıkları
+    update_intervals:
+      per_cycle:
+        - "global_cognitive_health"
+        - "failure_pressure"
+      per_10_cycles:
+        - "emotional_stability"
+        - "exploration_bias"
+      per_episode:
+        - "ethical_alignment"
+        - "memory_health"
+    
+    # Formül ağırlıkları
+    weights:
+      global_health:
+        coherence: 0.25
+        efficiency: 0.20
+        quality: 0.25
+        success_rate: 0.30
+    
+    # ⚠️ Alice notu: Confidence hesaplama kritik
+    confidence:
+      min_data_points: 10      # Bu kadar veri olmadan confidence düşük
+      low_threshold: 0.5       # Bu altında "low confidence" uyarısı
+      decay_factor: 0.95       # Eski verinin ağırlık azalması
+    
+    # Threshold'lar (anomaly detection için)
+    thresholds:
+      global_health_critical: 0.3
+      failure_pressure_high: 0.8
+      emotional_stability_low: 0.4
+      ethical_alignment_warning: 0.7
+  
+  # ============================================================
+  # PATTERN MINING CONFIGURATION
+  # ============================================================
+  pattern_mining:
+    action_sequence_length: 3     # N-gram uzunluğu
+    min_frequency: 3              # Minimum tekrar sayısı
+    min_confidence: 0.5           # Minimum güven skoru
+    max_patterns_per_type: 100    # Tip başına max pattern
+  
+  # ============================================================
+  # STORAGE CONFIGURATION
+  # ============================================================
+  storage:
+    retention_days:
+      episodes: 90
+      patterns: 180
+      meta_events: 30
+      insights: 90
+  
+  # ============================================================
+  # LOGGING CONFIGURATION
+  # ============================================================
+  logging:
+    # ⚠️ Alice notu: Her metriği confidence ile logla
+    log_confidence: true
+    log_performance: true
+    confidence_format: "{metric}={value:.3f} (confidence={conf:.2f})"
