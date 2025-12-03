@@ -1,19 +1,17 @@
 """
-MetaMind v1.9 - Core Module
-===========================
+MetaMind v1.9 - Core Module (Phase 3 Entegre)
+==============================================
 
 MetaMind'ın ana orchestrator'ı ve scheduler'ı.
 
-Bileşenler:
-- MetaMindCore: Ana koordinatör
-- Scheduler: Job-based task yönetimi
+Phase 3 Entegrasyonu:
+- MicroCycleAnalyzer: Her cycle'da anomaly detection
+- PatternMiner: Her 10 cycle'da pattern mining
 
 Scheduler modları:
 - online: Cycle path içinde (max 2ms)
 - online_async: Cycle sonrası async
 - offline_batch: Run sonu (v2.0)
-
-⚠️ Bu dosya mevcut metamind_core.py'yi DEĞİŞTİRİR
 """
 
 import logging
@@ -33,6 +31,7 @@ from .meta_state import MetaStateCalculator, MetaStateConfig
 from .episodes import EpisodeManager, EpisodeConfig
 from .adapters import MetricsAdapter
 from .storage import MetaMindStorage
+from .analyzers import MicroCycleAnalyzer, PatternMiner, create_cycle_analyzer, create_pattern_miner
 
 logger = logging.getLogger("UEM.MetaMind.Core")
 
@@ -80,7 +79,7 @@ class MetaMindConfig:
 
 class MetaMindCore:
     """
-    MetaMind v1.9 Ana Koordinatör.
+    MetaMind v1.9 Ana Koordinatör (Phase 3 Entegre).
     
     Sorumluluklar:
     1. Episode lifecycle yönetimi
@@ -88,9 +87,10 @@ class MetaMindCore:
     3. Job scheduling (online/async/batch)
     4. Storage koordinasyonu
     5. Event emission
+    6. Anomaly detection (Phase 3)
+    7. Pattern mining (Phase 3)
     
     Kullanım:
-        # unified_core.py içinde
         metamind = MetaMindCore(config_path="config/metamind.yaml")
         metamind.initialize(run_id)
         
@@ -138,6 +138,12 @@ class MetaMindCore:
         # MetaState calculator
         self.meta_state_calculator = MetaStateCalculator(self.config.meta_state)
         
+        # === Phase 3: Analyzers ===
+        self.cycle_analyzer = MicroCycleAnalyzer(
+            on_event=self._handle_analyzer_event,
+        )
+        self.pattern_miner = PatternMiner(storage=storage)
+        
         # Current state
         self._run_id: Optional[str] = None
         self._current_cycle: int = 0
@@ -152,7 +158,7 @@ class MetaMindCore:
         self._last_cycle_time_ms: float = 0.0
         self._total_online_time_ms: float = 0.0
         
-        logger.info(f"MetaMindCore v{self.config.version} created")
+        logger.info(f"MetaMindCore v{self.config.version} created (with Phase 3 analyzers)")
     
     def _setup_jobs(self) -> None:
         """Scheduler job'larını kur."""
@@ -188,8 +194,6 @@ class MetaMindCore:
         
         Args:
             run_id: Current run ID
-            
-        🔧 FIX: İlk episode da başlatılıyor
         """
         self._run_id = run_id
         self._current_cycle = 0
@@ -198,7 +202,7 @@ class MetaMindCore:
         # Episode manager initialize
         self.episode_manager.initialize(run_id)
         
-        # 🔧 FIX: İlk episode'u başlat
+        # İlk episode'u başlat
         self.episode_manager.start_episode_sync(
             start_cycle_id=1,
             semantic_tag="run_start",
@@ -208,6 +212,10 @@ class MetaMindCore:
         # MetaState calculator reset
         self.meta_state_calculator.reset()
         
+        # === Phase 3: Analyzer context ===
+        self.cycle_analyzer.set_context(run_id)
+        self.pattern_miner.initialize(run_id)
+        
         # Reset job counters
         for job in self._jobs.values():
             job.last_run_cycle = 0
@@ -215,7 +223,6 @@ class MetaMindCore:
         
         self._initialized = True
         logger.info(f"MetaMindCore initialized for run: {run_id}")
-
     
     def on_cycle_end(
         self,
@@ -274,7 +281,11 @@ class MetaMindCore:
                       if j.mode == JobMode.ONLINE_ASYNC.value and j.should_run(cycle_id)]
         
         if async_jobs:
-            asyncio.create_task(self._run_async_jobs(async_jobs, cycle_data, cycle_id))
+            try:
+                asyncio.create_task(self._run_async_jobs(async_jobs, cycle_data, cycle_id))
+            except RuntimeError:
+                # No running event loop
+                pass
         
         # Performance tracking
         self._last_cycle_time_ms = (time.perf_counter() - start_time) * 1000
@@ -291,6 +302,12 @@ class MetaMindCore:
     
     def _run_meta_state_update(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
         """MetaState hesapla ve güncelle."""
+        # === Phase 3: PatternMiner'a cycle data ekle ===
+        action = cycle_data.get('action', 'unknown')
+        valence = cycle_data.get('valence', 0.0)
+        arousal = cycle_data.get('arousal', 0.5)
+        self.pattern_miner.add_cycle_data(action, valence, arousal, cycle_data)
+        
         # MetricsSnapshot al
         if self.metrics_adapter:
             snapshot = self.metrics_adapter.get_snapshot(cycle_data, cycle_id)
@@ -317,36 +334,31 @@ class MetaMindCore:
         )
     
     def _run_anomaly_check(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
-        """Anomali kontrolü (basit threshold check)."""
-        if not self._current_meta_state:
-            return
+        """Anomali kontrolü - MicroCycleAnalyzer kullanır."""
+        # Update episode context
+        episode_id = self.episode_manager.get_current_episode_id()
+        self.cycle_analyzer.set_context(self._run_id, episode_id)
         
-        # Threshold checks
-        thresholds = self.config.meta_state.__dict__ if hasattr(self.config.meta_state, '__dict__') else {}
+        # MetricsSnapshot al
+        snapshot = None
+        if self.metrics_adapter:
+            snapshot = self.metrics_adapter.get_snapshot(cycle_data, cycle_id)
         
-        # Global health critical
-        if self._current_meta_state.global_cognitive_health.value < 0.3:
-            self._emit_event(
-                event_type=EventType.THRESHOLD_BREACH,
-                severity=Severity.WARNING,
-                message=f"Global health critical: {self._current_meta_state.global_cognitive_health.value:.2f}",
-                cycle_id=cycle_id,
-            )
+        # Analyze - bu otomatik olarak event emit eder
+        anomalies = self.cycle_analyzer.analyze(
+            cycle_data=cycle_data,
+            snapshot=snapshot,
+            meta_state=self._current_meta_state,
+            cycle_id=cycle_id,
+        )
         
-        # Failure pressure high
-        if self._current_meta_state.failure_pressure.value > 0.8:
-            self._emit_event(
-                event_type=EventType.THRESHOLD_BREACH,
-                severity=Severity.WARNING,
-                message=f"High failure pressure: {self._current_meta_state.failure_pressure.value:.2f}",
-                cycle_id=cycle_id,
-            )
+        if anomalies:
+            logger.debug(f"Cycle {cycle_id}: {len(anomalies)} anomalies detected")
     
     def _handle_episode_boundary(self, cycle_id: int) -> None:
         """Episode boundary işle."""
         # Mevcut episode'u kapat
         if self.episode_manager.has_active_episode:
-            # Sync version kullan (async context'te değiliz)
             self.episode_manager.end_current_episode_sync(
                 end_cycle_id=cycle_id,
                 summary={'meta_state': self._current_meta_state.to_summary_dict() if self._current_meta_state else {}},
@@ -387,9 +399,37 @@ class MetaMindCore:
             job.record_run(cycle_id, job_duration)
     
     async def _run_pattern_mining(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
-        """Pattern mining (Phase 3'te implement edilecek)."""
-        # Placeholder - Phase 3'te PatternMiner entegre edilecek
-        pass
+        """Pattern mining - PatternMiner.mine() çağırır."""
+        try:
+            # Episode context güncelle
+            episode_id = self.episode_manager.get_current_episode_id()
+            self.pattern_miner.set_episode(episode_id)
+            
+            # Mining yap
+            patterns = self.pattern_miner.mine()
+            
+            if patterns and self.storage:
+                for pattern in patterns:
+                    await self.storage.save_pattern(pattern)
+            if patterns:
+                logger.debug(f"Cycle {cycle_id}: {len(patterns)} patterns found")
+                
+                # Pattern detected event'leri emit et (top 3)
+                for pattern in patterns[:3]:
+                    self._emit_event(
+                        event_type=EventType.PATTERN_DETECTED,
+                        severity=Severity.INFO,
+                        message=f"Pattern: {pattern.pattern_key} (freq={pattern.frequency})",
+                        cycle_id=cycle_id,
+                        data={
+                            'pattern_type': pattern.pattern_type,
+                            'pattern_key': pattern.pattern_key,
+                            'frequency': pattern.frequency,
+                            'confidence': pattern.confidence,
+                        },
+                    )
+        except Exception as e:
+            logger.error(f"Pattern mining failed: {e}")
     
     async def _run_insight_generation(self, cycle_id: int) -> None:
         """Insight generation (Phase 5'te implement edilecek)."""
@@ -405,6 +445,8 @@ class MetaMindCore:
         data: Optional[Dict] = None,
     ) -> None:
         """MetaEvent oluştur ve kaydet."""
+        import json
+        
         event = MetaEvent(
             event_type=event_type.value,
             severity=severity.value,
@@ -418,7 +460,11 @@ class MetaMindCore:
         
         # Storage'a kaydet (async)
         if self.storage:
-            asyncio.create_task(self.storage.save_meta_event(event))
+            try:
+                asyncio.create_task(self.storage.save_meta_event(event))
+            except RuntimeError:
+                # No running loop
+                pass
         
         # Log
         if severity == Severity.CRITICAL:
@@ -427,6 +473,22 @@ class MetaMindCore:
             logger.warning(f"[MetaEvent] {message}")
         else:
             logger.debug(f"[MetaEvent] {message}")
+    
+    def _handle_analyzer_event(self, event: MetaEvent) -> None:
+        """MicroCycleAnalyzer'dan gelen event'leri işle."""
+        # Storage'a kaydet
+        if self.storage:
+            try:
+                asyncio.create_task(self.storage.save_meta_event(event))
+            except RuntimeError:
+                # No running loop
+                pass
+        
+        # Log
+        if event.severity == Severity.CRITICAL.value:
+            logger.error(f"[Analyzer] {event.message}")
+        elif event.severity == Severity.WARNING.value:
+            logger.warning(f"[Analyzer] {event.message}")
     
     def _on_episode_start(self, episode: Episode) -> None:
         """Episode start callback."""
@@ -448,14 +510,16 @@ class MetaMindCore:
         """Current Episode döndür."""
         return self.episode_manager.get_current_episode()
     
-
     def set_storage(self, storage: MetaMindStorage) -> None:
         """Storage'ı sonradan set et (DB bağlantısı kurulduktan sonra)."""
         self.storage = storage
         if self.episode_manager:
             self.episode_manager.storage = storage
+        # Phase 3: PatternMiner storage
+        if self.pattern_miner:
+            self.pattern_miner.storage = storage
         logger.debug("MetaMindCore: Storage set")
-
+    
     def get_performance_stats(self) -> Dict[str, Any]:
         """Performance istatistikleri."""
         return {
@@ -471,6 +535,8 @@ class MetaMindCore:
                 }
                 for name, job in self._jobs.items()
             },
+            # Phase 3 stats
+            'pattern_miner_stats': self.pattern_miner.get_stats() if self.pattern_miner else {},
         }
     
     async def on_run_end(self) -> None:

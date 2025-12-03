@@ -200,7 +200,7 @@ class MetaMindStorage:
                 pattern.confidence,
                 pattern.first_seen,
                 pattern.last_seen,
-                pattern.data
+                json.dumps(pattern.data or {})
             )
             logger.debug(f"Pattern saved: {pattern.pattern_type}:{pattern.pattern_key}")
             return True
