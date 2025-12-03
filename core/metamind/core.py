@@ -188,6 +188,8 @@ class MetaMindCore:
         
         Args:
             run_id: Current run ID
+            
+        🔧 FIX: İlk episode da başlatılıyor
         """
         self._run_id = run_id
         self._current_cycle = 0
@@ -196,12 +198,15 @@ class MetaMindCore:
         # Episode manager initialize
         self.episode_manager.initialize(run_id)
         
+        # 🔧 FIX: İlk episode'u başlat
+        self.episode_manager.start_episode_sync(
+            start_cycle_id=1,
+            semantic_tag="run_start",
+            boundary_reason="run_start",
+        )
+        
         # MetaState calculator reset
         self.meta_state_calculator.reset()
-        
-        # Storage initialize
-        if self.storage:
-            asyncio.create_task(self.storage.initialize())
         
         # Reset job counters
         for job in self._jobs.values():
@@ -210,6 +215,7 @@ class MetaMindCore:
         
         self._initialized = True
         logger.info(f"MetaMindCore initialized for run: {run_id}")
+
     
     def on_cycle_end(
         self,

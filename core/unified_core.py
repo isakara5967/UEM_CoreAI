@@ -485,6 +485,7 @@ class UnifiedUEMCore:
                 # Storage'ı bağla (logger'dan DB al)
                 if self.log_integration and self.log_integration.logger:
                     storage = MetaMindStorage(db=self.log_integration.logger.db)
+                    await storage.initialize()
                     self._metamind_core.set_storage(storage)
                 self._metamind_core.initialize(self._run_id)
                 self.logger.debug(f"[UnifiedCore] MetaMind v1.9 initialized for run: {self._run_id}")
@@ -1085,7 +1086,7 @@ class UnifiedUEMCore:
                         self._metamind_summary["episode_id"] = self._metamind_core.episode_manager.get_current_episode_id()
                 except Exception as e:
                     self.logger.debug(f"[MetaMind v1.9] Cycle end error: {e}")
-            
+
             # === Remaining 6 PreData Fields ===
             
             # 1. output_language (same as input for now)

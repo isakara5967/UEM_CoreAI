@@ -1,6 +1,6 @@
 """
-MetaMind v1.9 - Episode Manager
-===============================
+MetaMind v1.9 - Episode Manager (FIXED)
+=======================================
 
 Episode lifecycle yönetimi:
 - Otomatik boundary detection (her N cycle)
@@ -11,9 +11,12 @@ Episode lifecycle yönetimi:
 ⚠️ Alice Notları:
 - window_cycles ASLA hardcode olmayacak, config'ten gelecek
 - check_boundary() içinde magic number YASAK
+
+🔧 FIX: Sync versiyonlara storage yazma eklendi
 """
 
 import logging
+import asyncio
 from datetime import datetime
 from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass
@@ -321,7 +324,33 @@ class EpisodeManager:
     
     # ============================================================
     # SYNC VERSIONS (for non-async contexts)
+    # 🔧 FIX: Storage yazma eklendi
     # ============================================================
+    
+    def _save_episode_fire_and_forget(self, episode: Episode) -> None:
+        """
+        Episode'u storage'a kaydet (fire and forget).
+        Running loop varsa async task oluştur.
+        """
+        if not self.storage:
+            return
+        
+        if not getattr(self.storage, '_initialized', False):
+            logger.debug("Storage not initialized, skipping save")
+            return
+        
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.storage.save_episode(episode))
+            logger.debug(f"Episode save task created: {episode.episode_id}")
+        except RuntimeError:
+            # No running loop - sync context'teyiz
+            # Yeni loop oluştur ve çalıştır
+            try:
+                asyncio.run(self.storage.save_episode(episode))
+                logger.debug(f"Episode saved (sync): {episode.episode_id}")
+            except Exception as e:
+                logger.warning(f"Failed to save episode sync: {e}")
     
     def start_episode_sync(
         self,
@@ -329,7 +358,11 @@ class EpisodeManager:
         semantic_tag: str = "auto_window",
         boundary_reason: str = BoundaryReason.TIME_WINDOW.value,
     ) -> Episode:
-        """Sync version of start_episode (storage kaydetmez)."""
+        """
+        Sync version of start_episode.
+        
+        🔧 FIX: Storage'a da yazar (async task olarak)
+        """
         if not self._run_id:
             raise RuntimeError("EpisodeManager not initialized")
         
@@ -346,6 +379,9 @@ class EpisodeManager:
         
         self._current_episode = episode
         
+        # 🔧 FIX: Storage'a kaydet
+        self._save_episode_fire_and_forget(episode)
+        
         if self.on_episode_start:
             try:
                 self.on_episode_start(episode)
@@ -360,12 +396,19 @@ class EpisodeManager:
         end_cycle_id: int,
         summary: Optional[Dict[str, Any]] = None,
     ) -> Optional[Episode]:
-        """Sync version of end_current_episode (storage kaydetmez)."""
+        """
+        Sync version of end_current_episode.
+        
+        🔧 FIX: Storage'a da yazar (async task olarak)
+        """
         if not self._current_episode:
             return None
         
         episode = self._current_episode
         episode.close(end_cycle_id, summary or {})
+        
+        # 🔧 FIX: Storage'a kaydet
+        self._save_episode_fire_and_forget(episode)
         
         if self.on_episode_end:
             try:

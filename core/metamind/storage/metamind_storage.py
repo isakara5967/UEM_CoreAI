@@ -1,3 +1,4 @@
+import json
 """
 MetaMind v1.9 - Storage Module
 ==============================
@@ -91,7 +92,7 @@ class MetaMindStorage:
                 episode.semantic_tag,
                 episode.boundary_reason,
                 episode.cycle_count,
-                episode.summary
+                json.dumps(episode.summary or {})
             )
             logger.debug(f"Episode saved: {episode.episode_id}")
             return True
