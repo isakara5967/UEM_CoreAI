@@ -32,6 +32,8 @@ from .episodes import EpisodeManager, EpisodeConfig
 from .adapters import MetricsAdapter
 from .storage import MetaMindStorage
 from .analyzers import MicroCycleAnalyzer, PatternMiner, create_cycle_analyzer, create_pattern_miner
+from .insights import InsightGenerator, create_insight_generator
+from .evaluation import EpisodeEvaluator, create_episode_evaluator
 
 logger = logging.getLogger("UEM.MetaMind.Core")
 
@@ -143,6 +145,8 @@ class MetaMindCore:
             on_event=self._handle_analyzer_event,
         )
         self.pattern_miner = PatternMiner(storage=storage)
+        self.insight_generator = InsightGenerator(storage=storage)
+        self.episode_evaluator = EpisodeEvaluator()
         
         # Current state
         self._run_id: Optional[str] = None
@@ -215,6 +219,8 @@ class MetaMindCore:
         # === Phase 3: Analyzer context ===
         self.cycle_analyzer.set_context(run_id)
         self.pattern_miner.initialize(run_id)
+        self.insight_generator.set_context(run_id)
+        self.episode_evaluator.reset()
         
         # Reset job counters
         for job in self._jobs.values():
@@ -432,9 +438,24 @@ class MetaMindCore:
             logger.error(f"Pattern mining failed: {e}")
     
     async def _run_insight_generation(self, cycle_id: int) -> None:
-        """Insight generation (Phase 5'te implement edilecek)."""
-        # Placeholder - Phase 5'te InsightGenerator entegre edilecek
-        pass
+        """Insight generation - her 50 cycle'da summary üret."""
+        try:
+            # Context güncelle
+            episode_id = self.episode_manager.get_current_episode_id()
+            self.insight_generator.set_context(self._run_id, episode_id)
+            
+            # Cycle summary üret
+            insight = self.insight_generator.generate_cycle_summary(
+                cycle_id=cycle_id,
+                meta_state=self._current_meta_state,
+                anomalies=None,
+            )
+            
+            if insight:
+                logger.debug(f"Cycle {cycle_id}: Insight generated")
+                
+        except Exception as e:
+            logger.error(f"Insight generation failed: {e}")
     
     def _emit_event(
         self,
