@@ -305,7 +305,7 @@ class MetaMindStorage:
                 event.severity,
                 event.source,
                 event.message,
-                event.data
+                json.dumps(event.data or {})
             )
             logger.debug(f"MetaEvent saved: {event.event_type} - {event.severity}")
             return True
