@@ -1,25 +1,24 @@
 """
-MetaMind v1.9 - Social Health Pipeline (STUB)
-==============================================
+MetaMind v1.9 - Social Health Pipeline (IMPLEMENTED)
+=====================================================
 
-⚠️ ALICE KRİTİK UYARISI:
-Bu dosya social meta-analiz için TEK giriş noktasıdır.
-Başka yerden social analiz YAZILMAYACAK!
-Bu STUB v2.0'da implement edilecek.
+Multi-agent ortamda sosyal dinamiklerin meta-analizi.
 
-Social Health Metrikleri (v2.0 için tanımlı):
-1. trust_level: Ajana duyulan güven seviyesi
-2. cooperation_score: İşbirliği kalitesi
-3. social_engagement: Sosyal etkileşim seviyesi
+EmpathyOrchestrator'dan gelen verileri kullanarak:
+- Trust level
+- Cooperation score
+- Social engagement
+- Conflict frequency
+- Dominant/Isolated agent ratio
 
-Bu modül mevcut deprecated core/metamind/social/ klasörünün
-yerine geçer. Eski klasör kullanılmayacak.
+Veri Kaynağı: unified_core._empathy_results (her cycle'da dolu)
 """
 
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
+from collections import defaultdict
 
 logger = logging.getLogger("UEM.MetaMind.Social")
 
@@ -29,17 +28,29 @@ class SocialHealthMetrics:
     """
     Social health metrikleri.
     
-    v2.0'da implement edilecek 3 temel metrik:
-    1. trust_level: Ajana duyulan güven (0-1)
+    3 temel metrik:
+    1. trust_level: Ajanlara duyulan güven (0-1)
     2. cooperation_score: İşbirliği kalitesi (0-1)
-    3. social_engagement: Sosyal etkileşim (0-1)
+    3. social_engagement: Sosyal etkileşim seviyesi (0-1)
+    
+    Ek metrikler:
+    - conflict_frequency: Çatışma sıklığı (0-1)
+    - dominant_agent_ratio: Baskın ajan oranı (0-1)
+    - isolated_agent_ratio: İzole ajan oranı (0-1)
     """
-    # Core metrics (v2.0)
+    # Core metrics
     trust_level: float = 0.5
     cooperation_score: float = 0.5
     social_engagement: float = 0.5
     
-    # Confidence (⚠️ Düşük başlayacak)
+    # Extended metrics
+    conflict_frequency: float = 0.0
+    dominant_agent_ratio: float = 0.0
+    isolated_agent_ratio: float = 0.0
+    average_empathy: float = 0.0
+    average_resonance: float = 0.0
+    
+    # Confidence
     trust_confidence: float = 0.0
     cooperation_confidence: float = 0.0
     engagement_confidence: float = 0.0
@@ -47,19 +58,26 @@ class SocialHealthMetrics:
     # Meta
     timestamp: datetime = field(default_factory=datetime.utcnow)
     data_points: int = 0
-    is_stub: bool = True  # v2.0'da False olacak
+    agent_count: int = 0
+    is_stub: bool = False  # Artık gerçek implementasyon
     
     def to_dict(self) -> Dict[str, Any]:
         """Dict'e çevir."""
         return {
-            'trust_level': self.trust_level,
-            'cooperation_score': self.cooperation_score,
-            'social_engagement': self.social_engagement,
-            'trust_confidence': self.trust_confidence,
-            'cooperation_confidence': self.cooperation_confidence,
-            'engagement_confidence': self.engagement_confidence,
+            'trust_level': round(self.trust_level, 4),
+            'cooperation_score': round(self.cooperation_score, 4),
+            'social_engagement': round(self.social_engagement, 4),
+            'conflict_frequency': round(self.conflict_frequency, 4),
+            'dominant_agent_ratio': round(self.dominant_agent_ratio, 4),
+            'isolated_agent_ratio': round(self.isolated_agent_ratio, 4),
+            'average_empathy': round(self.average_empathy, 4),
+            'average_resonance': round(self.average_resonance, 4),
+            'trust_confidence': round(self.trust_confidence, 4),
+            'cooperation_confidence': round(self.cooperation_confidence, 4),
+            'engagement_confidence': round(self.engagement_confidence, 4),
             'timestamp': self.timestamp.isoformat(),
             'data_points': self.data_points,
+            'agent_count': self.agent_count,
             'is_stub': self.is_stub,
         }
     
@@ -72,232 +90,259 @@ class SocialHealthMetrics:
     def overall_confidence(self) -> float:
         """Genel confidence."""
         return (self.trust_confidence + self.cooperation_confidence + self.engagement_confidence) / 3
+    
+    def get_status(self) -> str:
+        """Durum string'i."""
+        health = self.overall_social_health
+        if health >= 0.7:
+            return "HEALTHY 🟢"
+        elif health >= 0.4:
+            return "MODERATE 🟡"
+        else:
+            return "POOR 🔴"
 
 
 class SocialHealthPipeline:
     """
     Social Health analiz pipeline'ı.
     
-    ⚠️ STUB - v2.0'da implement edilecek
+    EmpathyOrchestrator sonuçlarını alıp social health metrikleri hesaplar.
     
-    Bu sınıf:
-    - Social etkileşim verilerini toplar
-    - Trust, cooperation, engagement hesaplar
-    - MetaMind'a social health metrikleri sağlar
-    
-    v2.0 Implementation Plan:
-    1. Multi-agent interaction tracking
-    2. Trust model integration
-    3. Cooperation pattern analysis
-    4. Social engagement metrics
-    
-    Kullanım (v2.0):
+    Kullanım:
         pipeline = SocialHealthPipeline()
         pipeline.initialize(run_id)
         
-        # Her etkileşimde
-        pipeline.record_interaction(agent_id, interaction_type, outcome)
+        # Her cycle'da empathy sonuçlarını ekle
+        pipeline.process_empathy_results(empathy_results)
         
         # Metrikleri al
         metrics = pipeline.get_metrics()
     """
     
+    # Thresholds
+    DOMINANT_THRESHOLD = 0.7  # Bu üstü empathy = dominant
+    ISOLATED_THRESHOLD = 0.3  # Bu altı resonance = isolated
+    CONFLICT_THRESHOLD = -0.3  # Bu altı relationship = conflict
+    COOPERATIVE_THRESHOLD = 0.3  # Bu üstü relationship = cooperative
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Args:
-            config: Pipeline konfigürasyonu (v2.0)
+            config: Pipeline konfigürasyonu
         """
         self.config = config or {}
         self._run_id: Optional[str] = None
         self._initialized: bool = False
         
-        # v2.0'da kullanılacak data structures
-        self._interaction_history: List[Dict] = []
-        self._agent_trust_scores: Dict[str, float] = {}
+        # Empathy result history
+        self._empathy_history: List[List[Any]] = []  # Her cycle için empathy_results listesi
+        self._agent_stats: Dict[str, Dict] = defaultdict(lambda: {
+            'empathy_sum': 0.0,
+            'resonance_sum': 0.0,
+            'relationship_sum': 0.0,
+            'interaction_count': 0,
+        })
         
-        # Current metrics (STUB değerleri)
+        # Current metrics
         self._current_metrics = SocialHealthMetrics()
+        self._cycle_count = 0
         
-        logger.info("SocialHealthPipeline created (STUB - v2.0'da implement edilecek)")
+        logger.info("SocialHealthPipeline created (v2.0 - Full Implementation)")
     
     def initialize(self, run_id: str) -> None:
-        """
-        Pipeline'ı initialize et.
-        
-        Args:
-            run_id: Current run ID
-        """
+        """Pipeline'ı initialize et."""
         self._run_id = run_id
-        self._interaction_history.clear()
-        self._agent_trust_scores.clear()
+        self._empathy_history.clear()
+        self._agent_stats.clear()
         self._current_metrics = SocialHealthMetrics()
+        self._cycle_count = 0
         self._initialized = True
         
-        logger.debug(f"SocialHealthPipeline initialized for run: {run_id} (STUB)")
+        logger.debug(f"SocialHealthPipeline initialized for run: {run_id}")
     
-    def record_interaction(
-        self,
-        agent_id: str,
-        interaction_type: str,
-        outcome: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> None:
+    def process_empathy_results(self, empathy_results: List[Any]) -> SocialHealthMetrics:
         """
-        Sosyal etkileşim kaydet.
-        
-        ⚠️ STUB - v2.0'da implement edilecek
+        Empathy sonuçlarını işle ve metrikleri güncelle.
         
         Args:
-            agent_id: Etkileşilen ajanın ID'si
-            interaction_type: Etkileşim türü (cooperate, compete, communicate, etc.)
-            outcome: Sonuç (success, failure, neutral)
-            context: Opsiyonel context
+            empathy_results: EmpathyOrchestrator'dan dönen sonuç listesi
+            
+        Returns:
+            Güncellenmiş SocialHealthMetrics
         """
         if not self._initialized:
             logger.warning("SocialHealthPipeline not initialized")
-            return
+            return self._current_metrics
         
-        # STUB: Sadece kaydet, analiz yapma
-        interaction = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'agent_id': agent_id,
-            'interaction_type': interaction_type,
-            'outcome': outcome,
-            'context': context or {},
-        }
-        self._interaction_history.append(interaction)
+        self._cycle_count += 1
         
-        # STUB: Basit data point tracking
-        self._current_metrics.data_points += 1
+        if not empathy_results:
+            # Ajan yok - izole durum
+            self._current_metrics.agent_count = 0
+            self._current_metrics.social_engagement = 0.0
+            return self._current_metrics
         
-        logger.debug(
-            f"Social interaction recorded (STUB): {agent_id} - {interaction_type} - {outcome}"
-        )
-    
-    def get_metrics(self) -> SocialHealthMetrics:
-        """
-        Current social health metrics'i döndür.
+        # Store history
+        self._empathy_history.append(empathy_results)
+        if len(self._empathy_history) > 100:  # Son 100 cycle
+            self._empathy_history.pop(0)
         
-        ⚠️ STUB - Default değerler döner, v2.0'da hesaplanacak
+        # Per-agent stats güncelle
+        for result in empathy_results:
+            self._update_agent_stats(result)
         
-        Returns:
-            SocialHealthMetrics instance
-        """
-        # STUB: Default değerler döndür
-        # v2.0'da interaction_history analiz edilecek
-        
-        self._current_metrics.timestamp = datetime.utcnow()
-        
-        # STUB uyarısı log
-        if self._current_metrics.data_points > 0:
-            logger.debug(
-                f"SocialHealthPipeline returning STUB metrics "
-                f"({self._current_metrics.data_points} interactions recorded but not analyzed)"
-            )
+        # Metrikleri hesapla
+        self._calculate_metrics(empathy_results)
         
         return self._current_metrics
     
-    def get_trust_level(self, agent_id: Optional[str] = None) -> float:
-        """
-        Trust level döndür.
+    def _update_agent_stats(self, empathy_result: Any) -> None:
+        """Tek bir empathy result için agent stats güncelle."""
+        other = getattr(empathy_result, 'other_entity', None)
+        if not other:
+            return
         
-        ⚠️ STUB - Default 0.5 döner
+        agent_id = getattr(other, 'entity_id', 'unknown')
+        stats = self._agent_stats[agent_id]
         
-        Args:
-            agent_id: Specific agent için trust (None = overall)
+        stats['empathy_sum'] += getattr(empathy_result, 'empathy_level', 0.0)
+        stats['resonance_sum'] += getattr(empathy_result, 'resonance', 0.0)
+        stats['relationship_sum'] += getattr(other, 'relationship', 0.0)
+        stats['interaction_count'] += 1
+    
+    def _calculate_metrics(self, empathy_results: List[Any]) -> None:
+        """Tüm metrikleri hesapla."""
+        n = len(empathy_results)
+        if n == 0:
+            return
+        
+        # Değerleri topla
+        empathy_values = []
+        resonance_values = []
+        relationship_values = []
+        confidence_values = []
+        
+        for result in empathy_results:
+            empathy_values.append(getattr(result, 'empathy_level', 0.0))
+            resonance_values.append(getattr(result, 'resonance', 0.0))
+            confidence_values.append(getattr(result, 'confidence', 0.0))
             
-        Returns:
-            Trust level (0-1)
-        """
-        # STUB: Default değer
-        return 0.5
+            other = getattr(result, 'other_entity', None)
+            if other:
+                relationship_values.append(getattr(other, 'relationship', 0.0))
+        
+        # === CORE METRICS ===
+        
+        # Trust Level: Average empathy * average confidence
+        avg_empathy = sum(empathy_values) / n
+        avg_confidence = sum(confidence_values) / n if confidence_values else 0.0
+        self._current_metrics.trust_level = avg_empathy * (0.5 + 0.5 * avg_confidence)
+        self._current_metrics.trust_confidence = avg_confidence
+        
+        # Cooperation Score: Pozitif relationship oranı
+        if relationship_values:
+            cooperative_count = sum(1 for r in relationship_values if r > self.COOPERATIVE_THRESHOLD)
+            self._current_metrics.cooperation_score = cooperative_count / len(relationship_values)
+            self._current_metrics.cooperation_confidence = min(1.0, len(relationship_values) / 5)
+        
+        # Social Engagement: Average resonance
+        avg_resonance = sum(resonance_values) / n
+        self._current_metrics.social_engagement = avg_resonance
+        self._current_metrics.engagement_confidence = min(1.0, n / 3)
+        
+        # === EXTENDED METRICS ===
+        
+        # Conflict Frequency: Negatif relationship oranı
+        if relationship_values:
+            conflict_count = sum(1 for r in relationship_values if r < self.CONFLICT_THRESHOLD)
+            self._current_metrics.conflict_frequency = conflict_count / len(relationship_values)
+        
+        # Dominant Agent Ratio: Yüksek empathy alanların oranı
+        dominant_count = sum(1 for e in empathy_values if e > self.DOMINANT_THRESHOLD)
+        self._current_metrics.dominant_agent_ratio = dominant_count / n
+        
+        # Isolated Agent Ratio: Düşük resonance olanların oranı
+        isolated_count = sum(1 for r in resonance_values if r < self.ISOLATED_THRESHOLD)
+        self._current_metrics.isolated_agent_ratio = isolated_count / n
+        
+        # Averages
+        self._current_metrics.average_empathy = avg_empathy
+        self._current_metrics.average_resonance = avg_resonance
+        
+        # Meta
+        self._current_metrics.timestamp = datetime.utcnow()
+        self._current_metrics.data_points = self._cycle_count
+        self._current_metrics.agent_count = n
+    
+    def get_metrics(self) -> SocialHealthMetrics:
+        """Current social health metrics'i döndür."""
+        return self._current_metrics
+    
+    def get_trust_level(self, agent_id: Optional[str] = None) -> float:
+        """Trust level döndür."""
+        if agent_id and agent_id in self._agent_stats:
+            stats = self._agent_stats[agent_id]
+            if stats['interaction_count'] > 0:
+                return stats['empathy_sum'] / stats['interaction_count']
+        return self._current_metrics.trust_level
     
     def get_cooperation_score(self) -> float:
-        """
-        Cooperation score döndür.
-        
-        ⚠️ STUB - Default 0.5 döner
-        
-        Returns:
-            Cooperation score (0-1)
-        """
-        # STUB: Default değer
-        return 0.5
+        """Cooperation score döndür."""
+        return self._current_metrics.cooperation_score
     
     def get_social_engagement(self) -> float:
-        """
-        Social engagement döndür.
-        
-        ⚠️ STUB - Default 0.5 döner
-        
-        Returns:
-            Social engagement (0-1)
-        """
-        # STUB: Default değer
-        return 0.5
+        """Social engagement döndür."""
+        return self._current_metrics.social_engagement
+    
+    def get_dominant_agent_ratio(self) -> float:
+        """Dominant agent ratio döndür."""
+        return self._current_metrics.dominant_agent_ratio
+    
+    def get_isolated_agent_ratio(self) -> float:
+        """Isolated agent ratio döndür."""
+        return self._current_metrics.isolated_agent_ratio
+    
+    def get_average_empathy_score(self) -> float:
+        """Average empathy score döndür."""
+        return self._current_metrics.average_empathy
     
     def get_interaction_summary(self) -> Dict[str, Any]:
-        """
-        Interaction özeti döndür.
-        
-        Returns:
-            Summary dict
-        """
+        """Interaction özeti döndür."""
         return {
-            'total_interactions': len(self._interaction_history),
-            'unique_agents': len(set(
-                i['agent_id'] for i in self._interaction_history
-            )),
-            'is_stub': True,
-            'message': 'Social analysis not implemented (v2.0)',
+            'total_cycles': self._cycle_count,
+            'unique_agents': len(self._agent_stats),
+            'current_agent_count': self._current_metrics.agent_count,
+            'overall_health': self._current_metrics.overall_social_health,
+            'status': self._current_metrics.get_status(),
+            'is_stub': False,
+        }
+    
+    def get_agent_report(self, agent_id: str) -> Optional[Dict[str, Any]]:
+        """Belirli bir ajan için rapor."""
+        if agent_id not in self._agent_stats:
+            return None
+        
+        stats = self._agent_stats[agent_id]
+        n = stats['interaction_count']
+        
+        if n == 0:
+            return None
+        
+        return {
+            'agent_id': agent_id,
+            'interaction_count': n,
+            'average_empathy': stats['empathy_sum'] / n,
+            'average_resonance': stats['resonance_sum'] / n,
+            'average_relationship': stats['relationship_sum'] / n,
         }
     
     def reset(self) -> None:
         """Pipeline sıfırla."""
-        self._interaction_history.clear()
-        self._agent_trust_scores.clear()
+        self._empathy_history.clear()
+        self._agent_stats.clear()
         self._current_metrics = SocialHealthMetrics()
+        self._cycle_count = 0
         logger.debug("SocialHealthPipeline reset")
-    
-    # ============================================================
-    # V2.0 PLACEHOLDER METHODS
-    # ============================================================
-    
-    def analyze_trust_patterns(self) -> Dict[str, Any]:
-        """
-        Trust pattern analizi.
-        
-        ⚠️ v2.0'da implement edilecek
-        """
-        logger.warning("analyze_trust_patterns: Not implemented (v2.0)")
-        return {'status': 'not_implemented', 'version': '2.0'}
-    
-    def analyze_cooperation_patterns(self) -> Dict[str, Any]:
-        """
-        Cooperation pattern analizi.
-        
-        ⚠️ v2.0'da implement edilecek
-        """
-        logger.warning("analyze_cooperation_patterns: Not implemented (v2.0)")
-        return {'status': 'not_implemented', 'version': '2.0'}
-    
-    def predict_social_outcome(
-        self,
-        agent_id: str,
-        interaction_type: str,
-    ) -> Dict[str, Any]:
-        """
-        Sosyal etkileşim sonucu tahmini.
-        
-        ⚠️ v2.0'da implement edilecek
-        """
-        logger.warning("predict_social_outcome: Not implemented (v2.0)")
-        return {
-            'status': 'not_implemented',
-            'version': '2.0',
-            'prediction': 'unknown',
-            'confidence': 0.0,
-        }
 
 
 # ============================================================
@@ -307,11 +352,7 @@ class SocialHealthPipeline:
 def create_social_pipeline(
     config: Optional[Dict[str, Any]] = None,
 ) -> SocialHealthPipeline:
-    """
-    Factory function.
-    
-    ⚠️ Returns STUB pipeline - v2.0'da full implementation
-    """
+    """Factory function."""
     return SocialHealthPipeline(config=config)
 
 

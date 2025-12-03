@@ -33,6 +33,7 @@ from .adapters import MetricsAdapter
 from .storage import MetaMindStorage
 from .analyzers import MicroCycleAnalyzer, PatternMiner, create_cycle_analyzer, create_pattern_miner
 from .insights import InsightGenerator, create_insight_generator
+from .pipelines import SocialHealthPipeline, create_social_pipeline
 from .evaluation import EpisodeEvaluator, create_episode_evaluator
 
 logger = logging.getLogger("UEM.MetaMind.Core")
@@ -147,6 +148,7 @@ class MetaMindCore:
         self.pattern_miner = PatternMiner(storage=storage)
         self.insight_generator = InsightGenerator(storage=storage)
         self.episode_evaluator = EpisodeEvaluator()
+        self.social_pipeline = SocialHealthPipeline()
         
         # Current state
         self._run_id: Optional[str] = None
@@ -221,6 +223,7 @@ class MetaMindCore:
         self.pattern_miner.initialize(run_id)
         self.insight_generator.set_context(run_id)
         self.episode_evaluator.reset()
+        self.social_pipeline.initialize(run_id)
         
         # Reset job counters
         for job in self._jobs.values():
