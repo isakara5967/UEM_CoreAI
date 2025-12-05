@@ -38,7 +38,7 @@ class TestMetaMindComponents:
         from core.metamind import MetaMindCore
         mm = MetaMindCore()
         assert mm is not None
-        mm.initialize("test_run")
+        asyncio.run(mm.initialize("test_run"))
         assert mm._initialized is True
     
     def test_metamind_has_all_components(self):
@@ -69,7 +69,7 @@ class TestMetaState:
         """MetaState 6 metrik içerir."""
         from core.metamind import MetaMindCore
         mm = MetaMindCore()
-        mm.initialize("test_run")
+        asyncio.run(mm.initialize("test_run"))
         
         cycle_data = {
             "valence": 0.5,
@@ -83,7 +83,7 @@ class TestMetaState:
             "cycle_time_ms": 10,
         }
         
-        meta_state = mm.on_cycle_end(cycle_id=1, cycle_data=cycle_data)
+        meta_state = asyncio.run(mm.on_cycle_end(cycle_id=1, cycle_data=cycle_data))
         
         assert meta_state is not None
         assert hasattr(meta_state, 'global_cognitive_health')
@@ -97,10 +97,10 @@ class TestMetaState:
         """MetaState metrikleri confidence içerir (MetricWithConfidence)."""
         from core.metamind import MetaMindCore
         mm = MetaMindCore()
-        mm.initialize("test_run")
+        asyncio.run(mm.initialize("test_run"))
         
         cycle_data = {"valence": 0.5, "arousal": 0.5, "action": "wait", "success": True}
-        meta_state = mm.on_cycle_end(cycle_id=1, cycle_data=cycle_data)
+        meta_state = asyncio.run(mm.on_cycle_end(cycle_id=1, cycle_data=cycle_data))
         
         # MetricWithConfidence yapısı içinde confidence var
         assert hasattr(meta_state.global_cognitive_health, 'confidence')
@@ -115,7 +115,7 @@ class TestEpisodeManager:
         """Episode oluşturulabiliyor."""
         from core.metamind import MetaMindCore
         mm = MetaMindCore()
-        mm.initialize("test_run")
+        asyncio.run(mm.initialize("test_run"))
         
         episode_id = mm.episode_manager.get_current_episode_id()
         assert episode_id is not None
@@ -138,7 +138,7 @@ class TestSocialHealthPipeline:
         from core.metamind import MetaMindCore
         
         mm = MetaMindCore()
-        mm.initialize("test_run")  # Pipeline'ı initialize et
+        asyncio.run(mm.initialize("test_run"))  # Pipeline'ı initialize et
         
         # Mock empathy result
         class MockOtherEntity:
@@ -163,7 +163,7 @@ class TestSocialHealthPipeline:
         from core.metamind import MetaMindCore
         
         mm = MetaMindCore()
-        mm.initialize("test_run")
+        asyncio.run(mm.initialize("test_run"))
         
         class MockOther:
             entity_id = "agent1"
@@ -185,8 +185,7 @@ class TestSocialHealthPipeline:
 class TestEmpathy16D:
     """Empathy 16D state vector testleri."""
     
-    @pytest.mark.asyncio
-    async def test_agent_gets_16d_state_vector(self):
+    def test_agent_gets_16d_state_vector(self):
         """Agent'lar 16D state vector alıyor."""
         from core.unified_core import UnifiedUEMCore
         
@@ -199,15 +198,14 @@ class TestEmpathy16D:
             ],
         )
         
-        await core.cycle(world)
+        asyncio.run(core.cycle(world))
         
         if hasattr(core, '_empathy_results') and core._empathy_results:
             result = core._empathy_results[0]
             state_vector = result.other_entity.state_vector
             assert len(state_vector) == 16
     
-    @pytest.mark.asyncio
-    async def test_empathy_finds_similar_memories(self):
+    def test_empathy_finds_similar_memories(self):
         """Empathy benzer memory'ler buluyor."""
         from core.unified_core import UnifiedUEMCore
         
@@ -221,7 +219,7 @@ class TestEmpathy16D:
                 player_health=0.7,
                 player_energy=0.6,
             )
-            await core.cycle(world)
+            asyncio.run(core.cycle(world))
         
         # Sonra benzer agent ile test
         world = MockWorldState(
@@ -230,7 +228,7 @@ class TestEmpathy16D:
                 {'id': 'similar_npc', 'health': 0.7, 'energy': 0.6, 'valence': 0.1, 'danger': 0.2},
             ],
         )
-        await core.cycle(world)
+        asyncio.run(core.cycle(world))
         
         if hasattr(core, '_empathy_results') and core._empathy_results:
             result = core._empathy_results[0]
@@ -240,8 +238,7 @@ class TestEmpathy16D:
 class TestE2EIntegration:
     """End-to-end entegrasyon testleri."""
     
-    @pytest.mark.asyncio
-    async def test_full_cycle_with_metamind(self):
+    def test_full_cycle_with_metamind(self):
         """Tam cycle MetaMind ile çalışıyor."""
         from core.unified_core import UnifiedUEMCore
         
@@ -249,7 +246,7 @@ class TestE2EIntegration:
         mm = core._metamind_core
         
         assert mm is not None
-        mm.initialize("e2e_test")
+        asyncio.run(mm.initialize("e2e_test"))
         
         for i in range(3):
             world = MockWorldState(
@@ -259,7 +256,7 @@ class TestE2EIntegration:
                 player_energy=0.8,
                 agents=[{'id': f'npc_{i}', 'health': 0.7, 'energy': 0.6, 'valence': 0.2, 'danger': 0.1}],
             )
-            await core.cycle(world)
+            asyncio.run(core.cycle(world))
         
         meta_state = mm.get_meta_state()
         assert meta_state is not None
@@ -267,20 +264,19 @@ class TestE2EIntegration:
         social = mm.social_pipeline.get_metrics()
         assert social.is_stub is False
     
-    @pytest.mark.asyncio
-    async def test_empathy_to_social_pipeline_flow(self):
+    def test_empathy_to_social_pipeline_flow(self):
         """Empathy → SocialPipeline veri akışı çalışıyor."""
         from core.unified_core import UnifiedUEMCore
         
         core = UnifiedUEMCore()
         mm = core._metamind_core
-        mm.initialize("flow_test")
+        asyncio.run(mm.initialize("flow_test"))
         
         world = MockWorldState(
             tick=0,
             agents=[{'id': 'test_npc', 'health': 0.8, 'energy': 0.7, 'valence': 0.5, 'danger': 0.1}],
         )
-        await core.cycle(world)
+        asyncio.run(core.cycle(world))
         
         assert hasattr(core, '_empathy_results')
         
