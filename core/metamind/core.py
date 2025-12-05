@@ -349,6 +349,21 @@ class MetaMindCore:
             cycle_id=cycle_id,
             episode_id=self.episode_manager.get_current_episode_id(),
         )
+        
+        # === DB'ye kaydet ===
+        if self.storage and self._current_meta_state:
+            try:
+                asyncio.create_task(
+                    self.storage.save_meta_state_snapshot(
+                        run_id=self._run_id,
+                        cycle_id=cycle_id,
+                        meta_state=self._current_meta_state,
+                        episode_id=self.episode_manager.get_current_episode_id(),
+                    )
+                )
+            except RuntimeError:
+                # No running event loop - sync fallback
+                pass
     
     def _run_anomaly_check(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
         """Anomali kontrolü - MicroCycleAnalyzer kullanır."""

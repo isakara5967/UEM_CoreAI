@@ -389,21 +389,31 @@ class MetaMindStorage:
         
         try:
             await self.db.execute("""
-                UPDATE core.metamind_cycle_summary SET
-                    episode_id = $3,
-                    global_cognitive_health = $4,
-                    global_health_confidence = $5,
-                    emotional_stability_index = $6,
-                    emotional_stability_confidence = $7,
-                    ethical_alignment_index = $8,
-                    ethical_alignment_confidence = $9,
-                    exploration_bias_index = $10,
-                    exploration_bias_confidence = $11,
-                    failure_pressure_index = $12,
-                    failure_pressure_confidence = $13,
-                    memory_health_index = $14,
-                    memory_health_confidence = $15
-                WHERE run_id = $1 AND cycle_id = $2
+                INSERT INTO core.metamind_cycle_summary (
+                    run_id, cycle_id, episode_id,
+                    global_cognitive_health, global_health_confidence,
+                    emotional_stability_index, emotional_stability_confidence,
+                    ethical_alignment_index, ethical_alignment_confidence,
+                    exploration_bias_index, exploration_bias_confidence,
+                    failure_pressure_index, failure_pressure_confidence,
+                    memory_health_index, memory_health_confidence,
+                    calculated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+                ON CONFLICT (run_id, cycle_id) DO UPDATE SET
+                    episode_id = EXCLUDED.episode_id,
+                    global_cognitive_health = EXCLUDED.global_cognitive_health,
+                    global_health_confidence = EXCLUDED.global_health_confidence,
+                    emotional_stability_index = EXCLUDED.emotional_stability_index,
+                    emotional_stability_confidence = EXCLUDED.emotional_stability_confidence,
+                    ethical_alignment_index = EXCLUDED.ethical_alignment_index,
+                    ethical_alignment_confidence = EXCLUDED.ethical_alignment_confidence,
+                    exploration_bias_index = EXCLUDED.exploration_bias_index,
+                    exploration_bias_confidence = EXCLUDED.exploration_bias_confidence,
+                    failure_pressure_index = EXCLUDED.failure_pressure_index,
+                    failure_pressure_confidence = EXCLUDED.failure_pressure_confidence,
+                    memory_health_index = EXCLUDED.memory_health_index,
+                    memory_health_confidence = EXCLUDED.memory_health_confidence,
+                    calculated_at = NOW()
             """,
                 run_id,
                 cycle_id,
