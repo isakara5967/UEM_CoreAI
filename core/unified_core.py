@@ -487,7 +487,7 @@ class UnifiedUEMCore:
                     storage = MetaMindStorage(db=self.log_integration.logger.db)
                     await storage.initialize()
                     self._metamind_core.set_storage(storage)
-                self._metamind_core.initialize(self._run_id)
+                await self._metamind_core.initialize(self._run_id)
                 self.logger.debug(f"[UnifiedCore] MetaMind v1.9 initialized for run: {self._run_id}")
             except Exception as e:
                 self.logger.warning(f"[UnifiedCore] MetaMind v1.9 run init failed: {e}")
@@ -1076,7 +1076,7 @@ class UnifiedUEMCore:
                         "failure_streak": self._metamind_summary.get("failure_streak", 0),
                         "cycle_time_ms": sum(phase_times.values()),
                     }
-                    meta_state = self._metamind_core.on_cycle_end(
+                    meta_state = await self._metamind_core.on_cycle_end(
                         cycle_id=self.tick,
                         cycle_data=cycle_data_v19,
                         action_result=action_result,

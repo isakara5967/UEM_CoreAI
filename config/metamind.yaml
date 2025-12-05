@@ -26,20 +26,20 @@ metamind:
   # ============================================================
   scheduler:
     # Cycle path için maksimum ek süre (ms)
-    online_budget_ms: 2
+    online_budget_ms: 10
     
     jobs:
       # === ONLINE JOBS (cycle path içinde) ===
       meta_state_update:
         period_cycles: 1
         mode: "online"
-        target_ms: 0.5
+        target_ms: 5
         enabled: true
       
       anomaly_check:
         period_cycles: 1
         mode: "online"
-        target_ms: 0.5
+        target_ms: 5
         enabled: true
       
       # === ONLINE ASYNC JOBS (cycle sonrası) ===

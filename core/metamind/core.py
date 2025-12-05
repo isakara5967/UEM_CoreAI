@@ -12,6 +12,8 @@ Scheduler modları:
 - online: Cycle path içinde (max 2ms)
 - online_async: Cycle sonrası async
 - offline_batch: Run sonu (v2.0)
+
+🔧 FIX v3: Tüm episode işlemleri ASYNC yapıldı (FK hatası düzeltmesi)
 """
 
 import logging
@@ -95,13 +97,13 @@ class MetaMindCore:
     
     Kullanım:
         metamind = MetaMindCore(config_path="config/metamind.yaml")
-        metamind.initialize(run_id)
+        await metamind.initialize(run_id)  # 🔧 ASYNC
         
         # Her cycle sonunda
-        metamind.on_cycle_end(cycle_id, cycle_data, action_result)
+        await metamind.on_cycle_end(cycle_id, cycle_data, action_result)  # 🔧 ASYNC
         
         # Run sonunda
-        metamind.on_run_end()
+        await metamind.on_run_end()
     """
     
     def __init__(
@@ -194,9 +196,11 @@ class MetaMindCore:
         
         logger.debug(f"Scheduler setup: {len(self._jobs)} jobs")
     
-    def initialize(self, run_id: str) -> None:
+    async def initialize(self, run_id: str) -> None:
         """
         Yeni run için initialize et.
+        
+        🔧 FIX v3: ASYNC - Episode'u await ile başlatır (FK hatası düzeltmesi)
         
         Args:
             run_id: Current run ID
@@ -208,8 +212,8 @@ class MetaMindCore:
         # Episode manager initialize
         self.episode_manager.initialize(run_id)
         
-        # İlk episode'u başlat
-        self.episode_manager.start_episode_sync(
+        # 🔧 FIX v3: İlk episode'u ASYNC başlat
+        await self.episode_manager.start_episode(
             start_cycle_id=1,
             semantic_tag="run_start",
             boundary_reason="run_start",
@@ -233,7 +237,7 @@ class MetaMindCore:
         self._initialized = True
         logger.info(f"MetaMindCore initialized for run: {run_id}")
     
-    def on_cycle_end(
+    async def on_cycle_end(
         self,
         cycle_id: int,
         cycle_data: Dict[str, Any],
@@ -242,6 +246,8 @@ class MetaMindCore:
     ) -> Optional[MetaState]:
         """
         Her cycle sonunda çağrılır.
+        
+        🔧 FIX v3: ASYNC - Episode boundary'de await kullanır
         
         Args:
             cycle_id: Current cycle number
@@ -274,7 +280,7 @@ class MetaMindCore:
             
             try:
                 if job.name == 'meta_state_update':
-                    self._run_meta_state_update(cycle_data, cycle_id)
+                    await self._run_meta_state_update(cycle_data, cycle_id)
                 elif job.name == 'anomaly_check':
                     self._run_anomaly_check(cycle_data, cycle_id)
             except Exception as e:
@@ -290,8 +296,9 @@ class MetaMindCore:
                 )
         
         # === EPISODE BOUNDARY CHECK ===
+        # 🔧 FIX v3: ASYNC boundary handling
         if self.episode_manager.check_boundary(cycle_id):
-            self._handle_episode_boundary(cycle_id)
+            await self._handle_episode_boundary(cycle_id)
         
         # === ONLINE ASYNC JOBS (fire and forget) ===
         async_jobs = [j for j in self._jobs.values()
@@ -317,7 +324,7 @@ class MetaMindCore:
         
         return self._current_meta_state
     
-    def _run_meta_state_update(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
+    async def _run_meta_state_update(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
         """MetaState hesapla ve güncelle."""
         # === Phase 3: PatternMiner'a cycle data ekle ===
         action = cycle_data.get('action', 'unknown')
@@ -353,17 +360,14 @@ class MetaMindCore:
         # === DB'ye kaydet ===
         if self.storage and self._current_meta_state:
             try:
-                asyncio.create_task(
-                    self.storage.save_meta_state_snapshot(
-                        run_id=self._run_id,
-                        cycle_id=cycle_id,
-                        meta_state=self._current_meta_state,
-                        episode_id=self.episode_manager.get_current_episode_id(),
-                    )
+                await self.storage.save_meta_state_snapshot(
+                    run_id=self._run_id,
+                    cycle_id=cycle_id,
+                    meta_state=self._current_meta_state,
+                    episode_id=self.episode_manager.get_current_episode_id(),
                 )
-            except RuntimeError:
-                # No running event loop - sync fallback
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to save meta state snapshot: {e}")
     
     def _run_anomaly_check(self, cycle_data: Dict[str, Any], cycle_id: int) -> None:
         """Anomali kontrolü - MicroCycleAnalyzer kullanır."""
@@ -387,17 +391,21 @@ class MetaMindCore:
         if anomalies:
             logger.debug(f"Cycle {cycle_id}: {len(anomalies)} anomalies detected")
     
-    def _handle_episode_boundary(self, cycle_id: int) -> None:
-        """Episode boundary işle."""
+    async def _handle_episode_boundary(self, cycle_id: int) -> None:
+        """
+        Episode boundary işle.
+        
+        🔧 FIX v3: ASYNC - await ile episode kaydet (FK hatası düzeltmesi)
+        """
         # Mevcut episode'u kapat
         if self.episode_manager.has_active_episode:
-            self.episode_manager.end_current_episode_sync(
+            await self.episode_manager.end_current_episode(
                 end_cycle_id=cycle_id,
                 summary={'meta_state': self._current_meta_state.to_summary_dict() if self._current_meta_state else {}},
             )
         
         # Yeni episode başlat
-        self.episode_manager.start_episode_sync(start_cycle_id=cycle_id + 1)
+        await self.episode_manager.start_episode(start_cycle_id=cycle_id + 1)
         
         # Episode boundary event
         self._emit_event(

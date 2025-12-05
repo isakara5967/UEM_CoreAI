@@ -13,10 +13,12 @@ Episode lifecycle yönetimi:
 - check_boundary() içinde magic number YASAK
 
 🔧 FIX: Sync versiyonlara storage yazma eklendi
+🔧 FIX v2: fire-and-forget → bekleyerek kaydetme (FK hatası düzeltmesi)
 """
 
 import logging
 import asyncio
+import concurrent.futures
 from datetime import datetime
 from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass
@@ -324,13 +326,16 @@ class EpisodeManager:
     
     # ============================================================
     # SYNC VERSIONS (for non-async contexts)
-    # 🔧 FIX: Storage yazma eklendi
+    # 🔧 FIX v2: Bekleyerek kaydet (FK hatası düzeltmesi)
     # ============================================================
     
-    def _save_episode_fire_and_forget(self, episode: Episode) -> None:
+    def _save_episode_sync(self, episode: Episode) -> None:
         """
-        Episode'u storage'a kaydet (fire and forget).
-        Running loop varsa async task oluştur.
+        Episode'u storage'a HEMEN kaydet (bekleyerek).
+        
+        🔧 FIX v2: fire-and-forget DEĞİL - bekleyerek kaydediyor.
+        Çünkü sonraki event'ler episode_id FK'ya bağlı.
+        Episode DB'de olmadan event yazılamaz!
         """
         if not self.storage:
             return
@@ -339,18 +344,26 @@ class EpisodeManager:
             logger.debug("Storage not initialized, skipping save")
             return
         
+        async def save():
+            await self.storage.save_episode(episode)
+        
         try:
-            loop = asyncio.get_running_loop()
-            asyncio.create_task(self.storage.save_episode(episode))
-            logger.debug(f"Episode save task created: {episode.episode_id}")
-        except RuntimeError:
-            # No running loop - sync context'teyiz
-            # Yeni loop oluştur ve çalıştır
+            # Running loop var mı kontrol et
             try:
-                asyncio.run(self.storage.save_episode(episode))
+                loop = asyncio.get_running_loop()
+                # Running loop var - yeni thread'de çalıştır
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, save())
+                    future.result(timeout=2.0)  # Bekle - FK için kritik!
+                logger.debug(f"Episode saved (thread): {episode.episode_id}")
+            except RuntimeError:
+                # No running loop - direkt çalıştır
+                asyncio.run(save())
                 logger.debug(f"Episode saved (sync): {episode.episode_id}")
-            except Exception as e:
-                logger.warning(f"Failed to save episode sync: {e}")
+        except concurrent.futures.TimeoutError:
+            logger.warning(f"Episode save timeout: {episode.episode_id}")
+        except Exception as e:
+            logger.warning(f"Failed to save episode: {e}")
     
     def start_episode_sync(
         self,
@@ -361,7 +374,7 @@ class EpisodeManager:
         """
         Sync version of start_episode.
         
-        🔧 FIX: Storage'a da yazar (async task olarak)
+        🔧 FIX v2: Storage'a bekleyerek yazar (FK hatası düzeltmesi)
         """
         if not self._run_id:
             raise RuntimeError("EpisodeManager not initialized")
@@ -379,8 +392,8 @@ class EpisodeManager:
         
         self._current_episode = episode
         
-        # 🔧 FIX: Storage'a kaydet
-        self._save_episode_fire_and_forget(episode)
+        # 🔧 FIX v2: Storage'a HEMEN kaydet (bekleyerek)
+        self._save_episode_sync(episode)
         
         if self.on_episode_start:
             try:
@@ -399,7 +412,7 @@ class EpisodeManager:
         """
         Sync version of end_current_episode.
         
-        🔧 FIX: Storage'a da yazar (async task olarak)
+        🔧 FIX v2: Storage'a bekleyerek yazar
         """
         if not self._current_episode:
             return None
@@ -407,8 +420,8 @@ class EpisodeManager:
         episode = self._current_episode
         episode.close(end_cycle_id, summary or {})
         
-        # 🔧 FIX: Storage'a kaydet
-        self._save_episode_fire_and_forget(episode)
+        # 🔧 FIX v2: Storage'a HEMEN kaydet (bekleyerek)
+        self._save_episode_sync(episode)
         
         if self.on_episode_end:
             try:
