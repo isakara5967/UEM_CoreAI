@@ -238,6 +238,7 @@ class MetaMindCore:
         cycle_id: int,
         cycle_data: Dict[str, Any],
         action_result: Any = None,
+        empathy_results: List[Any] = None,
     ) -> Optional[MetaState]:
         """
         Her cycle sonunda çağrılır.
@@ -255,6 +256,13 @@ class MetaMindCore:
             return None
         
         start_time = time.perf_counter()
+        
+        # === SOCIAL HEALTH - Process empathy results ===
+        if empathy_results:
+            try:
+                self.social_pipeline.process_empathy_results(empathy_results)
+            except Exception as e:
+                logger.warning(f"Social pipeline error: {e}")
         self._current_cycle = cycle_id
         
         # === ONLINE JOBS ===

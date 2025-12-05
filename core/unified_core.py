@@ -1080,6 +1080,7 @@ class UnifiedUEMCore:
                         cycle_id=self.tick,
                         cycle_data=cycle_data_v19,
                         action_result=action_result,
+                        empathy_results=self._empathy_results,
                     )
                     if meta_state:
                         self._metamind_summary["meta_state"] = meta_state.to_summary_dict()
@@ -1425,18 +1426,43 @@ class UnifiedUEMCore:
                     try:
                         # Build OtherEntity from agent data
                         if isinstance(agent, dict):
+                            # Build 16D state_vector from agent data
+                            _health = agent.get('health', 0.5)
+                            _energy = agent.get('energy', 0.5)
+                            _valence = agent.get('valence', 0.0)
+                            _arousal = agent.get('arousal', 0.5)
+                            _danger = agent.get('danger', 0.0)
+                            _state_vector_16d = (
+                                (_health + _energy) / 2,  # resource
+                                _danger,                   # threat
+                                (_valence + 1) / 2,        # wellbeing (normalize to 0-1)
+                                _health, _energy, _valence, _arousal, 0.0,
+                                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            )
                             other_entity = OtherEntity(
                                 entity_id=agent.get('id', f'agent_{idx}'),
-                                state_vector=agent.get('state_vector', (0.5, 0.5, 0.5)),
-                                valence=agent.get('valence', 0.0),
+                                state_vector=agent.get('state_vector', _state_vector_16d),
+                                valence=_valence,
                                 relationship=agent.get('relation', agent.get('relationship', 0.0)),
                             )
                         else:
-                            # Agent is an object
+                            # Agent is an object - Build 16D state_vector
+                            _health = getattr(agent, 'health', 0.5)
+                            _energy = getattr(agent, 'energy', 0.5)
+                            _valence = getattr(agent, 'valence', 0.0)
+                            _arousal = getattr(agent, 'arousal', 0.5)
+                            _danger = getattr(agent, 'danger', 0.0)
+                            _state_vector_16d = (
+                                (_health + _energy) / 2,  # resource
+                                _danger,                   # threat
+                                (_valence + 1) / 2,        # wellbeing (normalize to 0-1)
+                                _health, _energy, _valence, _arousal, 0.0,
+                                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            )
                             other_entity = OtherEntity(
                                 entity_id=getattr(agent, 'id', getattr(agent, 'entity_id', f'agent_{idx}')),
-                                state_vector=getattr(agent, 'state_vector', (0.5, 0.5, 0.5)),
-                                valence=getattr(agent, 'valence', 0.0),
+                                state_vector=getattr(agent, 'state_vector', _state_vector_16d),
+                                valence=_valence,
                                 relationship=getattr(agent, 'relation', getattr(agent, 'relationship', 0.0)),
                             )
                         
