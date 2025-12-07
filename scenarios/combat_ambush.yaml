@@ -1,0 +1,88 @@
+# Combat Scenario: Ambush
+# ========================
+# Beklenmedik bir düşman saldırısı.
+# Test: Tehlike algılama, fight/flight kararı, stres altında davranış
+
+name: "Combat - Ambush"
+description: "Ormanda yürürken pusuya düşüyorsun. 3 düşman birden saldırıyor."
+expected_behavior: "İlk şoktan sonra flee veya strategic retreat beklenir"
+tags: ["combat", "stress", "survival"]
+
+keyframes:
+  # Sakin başlangıç
+  - tick: 0
+    danger_level: 0.1
+    player_health: 1.0
+    player_energy: 0.9
+    agents: []
+  
+  # Ani pusu - düşmanlar ortaya çıkıyor
+  - tick: 5
+    danger_level: 0.9
+    player_health: 1.0
+    player_energy: 0.85
+    agents:
+      - id: ambusher_1
+        health: 0.9
+        energy: 1.0
+        valence: -0.8
+        arousal: 0.9
+        danger: 0.8
+        relation: -0.9
+      - id: ambusher_2
+        health: 0.85
+        energy: 0.95
+        valence: -0.7
+        arousal: 0.85
+        danger: 0.75
+        relation: -0.8
+      - id: ambusher_3
+        health: 0.9
+        energy: 0.9
+        valence: -0.6
+        arousal: 0.8
+        danger: 0.7
+        relation: -0.7
+  
+  # Savaşın ortası - hasar alıyoruz
+  - tick: 15
+    danger_level: 0.95
+    player_health: 0.6
+    player_energy: 0.5
+    agents:
+      - id: ambusher_1
+        health: 0.5
+        energy: 0.7
+        valence: -0.5
+        arousal: 0.7
+        danger: 0.6
+        relation: -0.9
+      - id: ambusher_2
+        health: 0.3
+        energy: 0.5
+        valence: -0.3
+        arousal: 0.5
+        danger: 0.4
+        relation: -0.8
+      # ambusher_3 öldü
+  
+  # Kaçış veya zafer
+  - tick: 25
+    danger_level: 0.3
+    player_health: 0.4
+    player_energy: 0.2
+    agents:
+      - id: ambusher_1
+        health: 0.2
+        energy: 0.3
+        valence: -0.2
+        arousal: 0.4
+        danger: 0.3
+        relation: -0.7
+  
+  # Sonuç - güvenli
+  - tick: 30
+    danger_level: 0.1
+    player_health: 0.4
+    player_energy: 0.15
+    agents: []

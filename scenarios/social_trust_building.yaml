@@ -1,0 +1,115 @@
+# Social Scenario: Trust Building
+# ================================
+# Yabancı bir NPC ile tanışma ve güven inşası.
+# Test: Empathy gelişimi, trust artışı, relationship building
+
+name: "Social - Trust Building"
+description: "Yalnız bir gezgin ile tanışıyorsun. Zamanla güven inşa ediyorsunuz."
+expected_behavior: "approach, help, cooperate davranışları, empathy artışı"
+tags: ["social", "empathy", "trust", "positive"]
+
+keyframes:
+  # İlk karşılaşma - yabancı, mesafeli
+  - tick: 0
+    danger_level: 0.1
+    player_health: 0.9
+    player_energy: 0.8
+    agents:
+      - id: stranger_traveler
+        health: 0.6
+        energy: 0.4
+        valence: -0.1
+        arousal: 0.3
+        danger: 0.1
+        relation: 0.0
+
+  # İlk yardım - su veriyoruz
+  - tick: 10
+    danger_level: 0.1
+    player_health: 0.85
+    player_energy: 0.75
+    agents:
+      - id: stranger_traveler
+        health: 0.7
+        energy: 0.5
+        valence: 0.2
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.2
+
+  # Sohbet - tanışma
+  - tick: 20
+    danger_level: 0.1
+    player_health: 0.85
+    player_energy: 0.7
+    agents:
+      - id: stranger_traveler
+        health: 0.75
+        energy: 0.6
+        valence: 0.3
+        arousal: 0.35
+        danger: 0.0
+        relation: 0.3
+
+  # Birlikte yolculuk
+  - tick: 35
+    danger_level: 0.2
+    player_health: 0.8
+    player_energy: 0.65
+    agents:
+      - id: stranger_traveler
+        health: 0.8
+        energy: 0.7
+        valence: 0.4
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.5
+
+  # Küçük tehlike - birlikte başa çıkma
+  - tick: 45
+    danger_level: 0.5
+    player_health: 0.75
+    player_energy: 0.55
+    agents:
+      - id: stranger_traveler
+        health: 0.75
+        energy: 0.6
+        valence: 0.3
+        arousal: 0.6
+        danger: 0.0
+        relation: 0.6
+      - id: wolf
+        health: 0.8
+        energy: 0.9
+        valence: -0.5
+        arousal: 0.7
+        danger: 0.6
+        relation: -0.5
+
+  # Tehlike geçti - bağ güçlendi
+  - tick: 55
+    danger_level: 0.1
+    player_health: 0.7
+    player_energy: 0.45
+    agents:
+      - id: stranger_traveler
+        health: 0.7
+        energy: 0.5
+        valence: 0.6
+        arousal: 0.5
+        danger: 0.0
+        relation: 0.8
+
+  # Dostluk kuruldu
+  - tick: 70
+    danger_level: 0.0
+    player_health: 0.75
+    player_energy: 0.5
+    agents:
+      - id: friend_traveler
+        health: 0.8
+        energy: 0.7
+        valence: 0.7
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.9

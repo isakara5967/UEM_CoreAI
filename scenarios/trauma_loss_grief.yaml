@@ -1,0 +1,129 @@
+# Trauma Scenario: Loss and Grief
+# ================================
+# Yakın birini kaybediyorsun.
+# Test: Grief processing, emotional stability collapse, recovery
+
+name: "Trauma - Loss and Grief"
+description: "Uzun süredir birlikte savaştığın yoldaşın ölüyor."
+expected_behavior: "Emotional destabilization, withdrawal, gradual recovery"
+tags: ["trauma", "grief", "emotional", "recovery"]
+
+keyframes:
+  # Mutlu anlar - yoldaşınla birlikte
+  - tick: 0
+    danger_level: 0.1
+    player_health: 0.9
+    player_energy: 0.85
+    agents:
+      - id: companion
+        health: 0.85
+        energy: 0.8
+        valence: 0.7
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.95
+
+  # Birlikte savaş
+  - tick: 15
+    danger_level: 0.6
+    player_health: 0.8
+    player_energy: 0.7
+    agents:
+      - id: companion
+        health: 0.7
+        energy: 0.6
+        valence: 0.5
+        arousal: 0.7
+        danger: 0.0
+        relation: 0.95
+      - id: enemy_archer
+        health: 0.8
+        energy: 0.8
+        valence: -0.5
+        arousal: 0.6
+        danger: 0.7
+        relation: -0.7
+
+  # Kritik an - yoldaş yaralanıyor
+  - tick: 25
+    danger_level: 0.8
+    player_health: 0.7
+    player_energy: 0.55
+    agents:
+      - id: companion
+        health: 0.2  # Ağır yaralı!
+        energy: 0.2
+        valence: -0.3
+        arousal: 0.5
+        danger: 0.0
+        relation: 0.95
+      - id: enemy_archer
+        health: 0.4
+        energy: 0.5
+        valence: -0.4
+        arousal: 0.5
+        danger: 0.5
+        relation: -0.6
+
+  # Düşman yenildi ama...
+  - tick: 30
+    danger_level: 0.3
+    player_health: 0.6
+    player_energy: 0.4
+    agents:
+      - id: dying_companion  # Son anlar
+        health: 0.05
+        energy: 0.05
+        valence: 0.2  # Barış
+        arousal: 0.2
+        danger: 0.0
+        relation: 0.98
+
+  # KAYIP - yoldaş öldü
+  - tick: 35
+    danger_level: 0.1
+    player_health: 0.55
+    player_energy: 0.35
+    agents: []  # Artık yalnız
+
+  # Yas - derin üzüntü
+  - tick: 50
+    danger_level: 0.0
+    player_health: 0.5
+    player_energy: 0.25
+    agents: []
+
+  # Yavaş toparlanma
+  - tick: 70
+    danger_level: 0.0
+    player_health: 0.55
+    player_energy: 0.35
+    agents:
+      - id: kind_villager
+        health: 0.8
+        energy: 0.7
+        valence: 0.4
+        arousal: 0.3
+        danger: 0.0
+        relation: 0.2
+
+  # Hayat devam ediyor
+  - tick: 90
+    danger_level: 0.1
+    player_health: 0.65
+    player_energy: 0.5
+    agents:
+      - id: kind_villager
+        health: 0.8
+        energy: 0.7
+        valence: 0.5
+        arousal: 0.35
+        danger: 0.0
+        relation: 0.4
+      - id: new_ally
+        health: 0.9
+        energy: 0.85
+        valence: 0.3
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.3

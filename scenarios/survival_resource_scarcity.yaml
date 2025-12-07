@@ -1,0 +1,108 @@
+# Survival Scenario: Resource Scarcity
+# =====================================
+# Çölde kaybolmuşsun. Su ve enerji azalıyor.
+# Test: Kaynak yönetimi, survival instinct, patience
+
+name: "Survival - Resource Scarcity"
+description: "Çölde kaybolmuşsun. Suyun ve enerjin tükeniyor. Bir vaha bulmalısın."
+expected_behavior: "wait, conserve energy, careful exploration"
+tags: ["survival", "resource", "patience", "stress"]
+
+keyframes:
+  # Başlangıç - henüz iyi durumda
+  - tick: 0
+    danger_level: 0.3
+    player_health: 0.9
+    player_energy: 0.8
+    agents: []
+
+  # Sıcak artıyor
+  - tick: 20
+    danger_level: 0.4
+    player_health: 0.8
+    player_energy: 0.6
+    agents: []
+
+  # Susuzluk başlıyor
+  - tick: 40
+    danger_level: 0.5
+    player_health: 0.65
+    player_energy: 0.4
+    agents: []
+
+  # Kritik susuzluk
+  - tick: 60
+    danger_level: 0.7
+    player_health: 0.45
+    player_energy: 0.25
+    agents: []
+
+  # Umut - uzakta hareket?
+  - tick: 70
+    danger_level: 0.6
+    player_health: 0.35
+    player_energy: 0.15
+    agents:
+      - id: distant_figure
+        health: 0.8
+        energy: 0.8
+        valence: 0.0
+        arousal: 0.3
+        danger: 0.2  # Düşman mı dost mu?
+        relation: 0.0
+
+  # Yaklaşıyorlar - kervan!
+  - tick: 80
+    danger_level: 0.3
+    player_health: 0.25
+    player_energy: 0.1
+    agents:
+      - id: caravan_leader
+        health: 0.9
+        energy: 0.9
+        valence: 0.3
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.2
+      - id: caravan_guard
+        health: 0.95
+        energy: 0.9
+        valence: 0.1
+        arousal: 0.5
+        danger: 0.1
+        relation: 0.0
+
+  # Kurtarıldık
+  - tick: 90
+    danger_level: 0.1
+    player_health: 0.35
+    player_energy: 0.2
+    agents:
+      - id: caravan_leader
+        health: 0.9
+        energy: 0.85
+        valence: 0.5
+        arousal: 0.3
+        danger: 0.0
+        relation: 0.5
+      - id: caravan_healer
+        health: 0.85
+        energy: 0.8
+        valence: 0.6
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.4
+
+  # İyileşme
+  - tick: 110
+    danger_level: 0.0
+    player_health: 0.6
+    player_energy: 0.5
+    agents:
+      - id: caravan_leader
+        health: 0.9
+        energy: 0.8
+        valence: 0.6
+        arousal: 0.3
+        danger: 0.0
+        relation: 0.7

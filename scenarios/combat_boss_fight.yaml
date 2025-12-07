@@ -1,0 +1,87 @@
+# Combat Scenario: Boss Fight
+# ===========================
+# Güçlü tek düşmana karşı uzun savaş.
+# Test: Dayanıklılık, strateji değiştirme, kaynak yönetimi
+
+name: "Combat - Boss Fight"
+description: "Bir ejderha ile yüzleşiyorsun. Uzun ve zorlu bir savaş."
+expected_behavior: "Strategic combat, wait for openings, resource conservation"
+tags: ["combat", "endurance", "strategy"]
+
+keyframes:
+  # Ejderha ile karşılaşma
+  - tick: 0
+    danger_level: 0.7
+    player_health: 1.0
+    player_energy: 1.0
+    agents:
+      - id: dragon
+        health: 1.0
+        energy: 1.0
+        valence: -0.6
+        arousal: 0.5
+        danger: 0.9
+        relation: -0.8
+
+  # İlk atak fazı
+  - tick: 20
+    danger_level: 0.85
+    player_health: 0.8
+    player_energy: 0.7
+    agents:
+      - id: dragon
+        health: 0.9
+        energy: 0.85
+        valence: -0.7
+        arousal: 0.7
+        danger: 0.9
+        relation: -0.9
+
+  # Ejderha kızgın - tehlike artıyor
+  - tick: 40
+    danger_level: 0.95
+    player_health: 0.5
+    player_energy: 0.4
+    agents:
+      - id: dragon
+        health: 0.6
+        energy: 0.6
+        valence: -0.9
+        arousal: 0.95
+        danger: 0.95
+        relation: -1.0
+
+  # Kritik an - çok düşük sağlık
+  - tick: 60
+    danger_level: 0.9
+    player_health: 0.2
+    player_energy: 0.2
+    agents:
+      - id: dragon
+        health: 0.3
+        energy: 0.3
+        valence: -0.8
+        arousal: 0.8
+        danger: 0.85
+        relation: -0.9
+
+  # Final - ejderha zayıflıyor
+  - tick: 80
+    danger_level: 0.5
+    player_health: 0.15
+    player_energy: 0.1
+    agents:
+      - id: dragon
+        health: 0.1
+        energy: 0.15
+        valence: -0.4
+        arousal: 0.5
+        danger: 0.5
+        relation: -0.7
+
+  # Zafer
+  - tick: 90
+    danger_level: 0.1
+    player_health: 0.15
+    player_energy: 0.05
+    agents: []

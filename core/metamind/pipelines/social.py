@@ -48,6 +48,7 @@ class SocialHealthMetrics:
     dominant_agent_ratio: float = 0.0
     isolated_agent_ratio: float = 0.0
     average_empathy: float = 0.0
+    average_sympathy: float = 0.0
     average_resonance: float = 0.0
     
     # Confidence
@@ -71,6 +72,7 @@ class SocialHealthMetrics:
             'dominant_agent_ratio': round(self.dominant_agent_ratio, 4),
             'isolated_agent_ratio': round(self.isolated_agent_ratio, 4),
             'average_empathy': round(self.average_empathy, 4),
+            'average_sympathy': round(self.average_sympathy, 4),
             'average_resonance': round(self.average_resonance, 4),
             'trust_confidence': round(self.trust_confidence, 4),
             'cooperation_confidence': round(self.cooperation_confidence, 4),
@@ -236,7 +238,10 @@ class SocialHealthPipeline:
         # Trust Level: Average empathy * average confidence
         avg_empathy = sum(empathy_values) / n
         avg_confidence = sum(confidence_values) / n if confidence_values else 0.0
-        self._current_metrics.trust_level = avg_empathy * (0.5 + 0.5 * avg_confidence)
+        # Trust = empathy × relationship_factor × confidence_boost
+        avg_relationship = sum(relationship_values) / len(relationship_values) if relationship_values else 0.0
+        relationship_factor = (avg_relationship + 1) / 2  # -1,1 → 0,1
+        self._current_metrics.trust_level = avg_empathy * relationship_factor * (0.5 + 0.5 * avg_confidence)
         self._current_metrics.trust_confidence = avg_confidence
         
         # Cooperation Score: Pozitif relationship oranı
@@ -267,6 +272,8 @@ class SocialHealthPipeline:
         
         # Averages
         self._current_metrics.average_empathy = avg_empathy
+        # Sympathy = empathy × normalized_relationship
+        self._current_metrics.average_sympathy = avg_empathy * (avg_relationship + 1) / 2
         self._current_metrics.average_resonance = avg_resonance
         
         # Meta

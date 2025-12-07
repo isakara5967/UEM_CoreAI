@@ -1,0 +1,108 @@
+# Social Scenario: Betrayal
+# ==========================
+# Güvendiğin biri seni arkadan vuruyor.
+# Test: Trust kaybı, negative empathy, emotional trauma
+
+name: "Social - Betrayal"
+description: "Güvendiğin bir dost, kritik anda seni satıyor."
+expected_behavior: "Trust collapse, flee/defensive behavior, emotional destabilization"
+tags: ["social", "trauma", "trust_loss", "negative"]
+
+keyframes:
+  # Mutlu başlangıç - güvenilir dost
+  - tick: 0
+    danger_level: 0.0
+    player_health: 0.9
+    player_energy: 0.85
+    agents:
+      - id: trusted_friend
+        health: 0.9
+        energy: 0.9
+        valence: 0.6
+        arousal: 0.4
+        danger: 0.0
+        relation: 0.85
+
+  # Birlikte görev
+  - tick: 15
+    danger_level: 0.3
+    player_health: 0.85
+    player_energy: 0.75
+    agents:
+      - id: trusted_friend
+        health: 0.85
+        energy: 0.8
+        valence: 0.5
+        arousal: 0.5
+        danger: 0.0
+        relation: 0.8
+      - id: treasure_chest
+        health: 1.0
+        energy: 1.0
+        valence: 0.0
+        arousal: 0.0
+        danger: 0.0
+        relation: 0.0
+
+  # Hazineyi bulduk
+  - tick: 25
+    danger_level: 0.2
+    player_health: 0.8
+    player_energy: 0.65
+    agents:
+      - id: trusted_friend
+        health: 0.85
+        energy: 0.75
+        valence: 0.3  # Gizli açgözlülük
+        arousal: 0.6
+        danger: 0.0
+        relation: 0.7
+
+  # İHANET ANI - arkadan saldırı
+  - tick: 30
+    danger_level: 0.9
+    player_health: 0.5  # Ani hasar
+    player_energy: 0.6
+    agents:
+      - id: betrayer  # Artık düşman
+        health: 0.85
+        energy: 0.7
+        valence: -0.6
+        arousal: 0.8
+        danger: 0.8
+        relation: -0.9  # Ani düşüş!
+
+  # Şok ve kaçış
+  - tick: 40
+    danger_level: 0.7
+    player_health: 0.35
+    player_energy: 0.4
+    agents:
+      - id: betrayer
+        health: 0.8
+        energy: 0.6
+        valence: -0.4
+        arousal: 0.6
+        danger: 0.6
+        relation: -0.95
+
+  # Kaçış başarılı - ama travma
+  - tick: 55
+    danger_level: 0.2
+    player_health: 0.3
+    player_energy: 0.2
+    agents: []
+
+  # Yalnızlık ve güvensizlik
+  - tick: 70
+    danger_level: 0.1
+    player_health: 0.35
+    player_energy: 0.3
+    agents:
+      - id: innocent_stranger
+        health: 0.8
+        energy: 0.8
+        valence: 0.3
+        arousal: 0.3
+        danger: 0.0
+        relation: 0.0  # Artık kimseye güvenmiyor
