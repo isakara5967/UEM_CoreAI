@@ -6,7 +6,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-336791.svg)](https://postgresql.org)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-yellow.svg)]()
 
 *Building AI systems that understand, feel, and decide like cognitive beings*
@@ -193,7 +193,7 @@ Dynamic trust evaluation with **7 trust levels**:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/UEM_CoreAI.git
+git clone https://github.com/isakara5967/UEM_CoreAI.git
 cd UEM_CoreAI
 
 # Create virtual environment
@@ -397,7 +397,20 @@ pytest tests/ --cov=core --cov-report=html
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Mozilla Public License 2.0** - see the [LICENSE](LICENSE) file for details.
+
+### Why MPL 2.0?
+
+| Feature | Benefit |
+|---------|---------|
+| ✅ Patent Protection | Contributors can't sue you for patent infringement |
+| ✅ File-level Copyleft | Modified files must stay open, new files can be proprietary |
+| ✅ Commercial Friendly | Companies can contribute and use |
+| ✅ Future Proof | Well-tested license used by Firefox, Rust |
+
+### AI Assistance Disclosure
+
+This project was developed with assistance from AI tools (Claude by Anthropic). The human author has directed, reviewed, modified, and approved all content. See the [LICENSE](LICENSE) file for full transparency statement.
 
 ---
 
